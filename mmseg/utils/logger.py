@@ -2,8 +2,9 @@ import logging
 
 from mmcv.utils import get_logger
 
+current_split = None
 
-def get_root_logger(log_file=None, log_level=logging.INFO):
+def get_root_logger(log_file=None, log_level=logging.INFO, split=None):
     """Get the root logger.
 
     The logger will be initialized if it has not been initialized. By default a
@@ -21,7 +22,13 @@ def get_root_logger(log_file=None, log_level=logging.INFO):
     Returns:
         logging.Logger: The root logger.
     """
-
-    logger = get_logger(name='mmseg', log_file=log_file, log_level=log_level)
+    global current_split
+    if current_split == None and split == None:
+        logger = get_logger(name='mmseg', log_file=log_file, log_level=log_level)
+    elif split != None:
+        current_split = split
+        logger = get_logger(name=f'mmseg_{current_split}', log_file=log_file, log_level=log_level)
+    else:
+        logger = get_logger(name=f'mmseg_{current_split}', log_file=log_file, log_level=log_level)
 
     return logger

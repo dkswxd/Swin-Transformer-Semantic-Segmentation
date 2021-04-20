@@ -108,7 +108,7 @@ def main():
         # init the logger before other steps
         timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
         log_file = osp.join(cfg.work_dir, f'{timestamp}.log')
-        logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
+        logger = get_root_logger(log_file=log_file, log_level=cfg.log_level,split=fold)
 
         # init the meta dict to record some important information such as
         # environment info and seed, which will be logged
@@ -165,6 +165,27 @@ def main():
             timestamp=timestamp,
             meta=meta)
 
+        eval_best(cfg.work_dir, logger.handlers[1].baseFilename, 'kappa')
+
+def eval_best(work_dir,log_filename, metric):
+    iteration = 0
+    best_metric = -float('inf')
+    with open(log_filename) as f:
+        for line in f.readlines():
+            if not line.startswith('2021'):
+                continue
+            parse_line = line.strip().split(' ')
+            if len(parse_line) < 8:
+                continue
+            if parse_line[7] == 'Saving':
+                iteration = int(parse_line[10])
+            if parse_line[7].startswith(metric):
+                current_metric = float(parse_line[7].split(':')[1])
+                if current_metric > best_metric:
+                    mmcv.symlink(f'iter_{iteration}.pth', osp.join(work_dir, 'eval_best.pth'))
+                    best_metric = current_metric
+
+    pass
 
 if __name__ == '__main__':
     main()
