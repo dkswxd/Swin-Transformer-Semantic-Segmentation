@@ -2,6 +2,7 @@ _base_ = [
     '../_base_/models/upernet_swin.py', '../_base_/datasets/hyper_c3.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_4k.py'
 ]
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     backbone=dict(
         embed_dim=96,
@@ -11,15 +12,17 @@ model = dict(
         ape=False,
         drop_path_rate=0.3,
         patch_norm=True,
-        use_checkpoint=False
+        use_checkpoint=False,
     ),
     decode_head=dict(
         in_channels=[96, 192, 384, 768],
-        num_classes=2
+        num_classes=2,
+        norm_cfg=norm_cfg
     ),
     auxiliary_head=dict(
         in_channels=384,
-        num_classes=2
+        num_classes=2,
+        norm_cfg=norm_cfg
     ))
 
 # AdamW optimizer, no weight decay for position embedding & layer norm in backbone
@@ -35,4 +38,8 @@ lr_config = dict(_delete_=True, policy='poly',
                  power=1.0, min_lr=0.0, by_epoch=False)
 
 # By default, models are trained on 8 GPUs with 2 images per GPU
-data=dict(samples_per_gpu=2)
+
+
+data = dict(
+    samples_per_gpu=2,
+    workers_per_gpu=2,)
