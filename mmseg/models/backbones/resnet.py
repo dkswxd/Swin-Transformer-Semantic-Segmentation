@@ -8,6 +8,7 @@ from mmcv.utils.parrots_wrapper import _BatchNorm
 from mmseg.utils import get_root_logger
 from ..builder import BACKBONES
 from ..utils import ResLayer
+import torch.utils.checkpoint as checkpoint
 
 
 class BasicBlock(nn.Module):
@@ -685,4 +686,60 @@ class ResNetV1d(ResNet):
 
     def __init__(self, **kwargs):
         super(ResNetV1d, self).__init__(
+            deep_stem=True, avg_down=True, **kwargs)
+
+@BACKBONES.register_module()
+class ResNet_sp(ResNet):
+    def forward(self, x):
+        """Forward function."""
+        # input x: (B, S, H, W)
+        _B, _S, _H, _W = x.shape
+        x = x.reshape((_B*_S, 1, _H, _W))
+        # reshape x: (B*S, 1, H, W)
+        x = x.repeat_interleave(3, dim=1)
+        # repeat x: (B*S, 3, H, W)
+        if self.deep_stem:
+            x = self.stem(x)
+        else:
+            x = self.conv1(x)
+            x = self.norm1(x)
+            x = self.relu(x)
+        x = self.maxpool(x)
+        outs = []
+        for i, layer_name in enumerate(self.res_layers):
+            res_layer = getattr(self, layer_name)
+            x = checkpoint.checkpoint(res_layer, x)
+            if i in self.out_indices:
+                # now x: (B*S, C, H, W)
+                _, _, _H, _W = x.shape
+                outs.append(x.reshape((_B, _S, -1, _H, _W)))
+        return tuple(outs)
+
+@BACKBONES.register_module()
+class ResNetV1c_sp(ResNet_sp):
+    """ResNetV1c variant described in [1]_.
+
+    Compared with default ResNet(ResNetV1b), ResNetV1c replaces the 7x7 conv
+    in the input stem with three 3x3 convs.
+
+    References:
+        .. [1] https://arxiv.org/pdf/1812.01187.pdf
+    """
+
+    def __init__(self, **kwargs):
+        super(ResNetV1c_sp, self).__init__(
+            deep_stem=True, avg_down=False, **kwargs)
+
+
+@BACKBONES.register_module()
+class ResNetV1d_sp(ResNet_sp):
+    """ResNetV1d variant described in [1]_.
+
+    Compared with default ResNet(ResNetV1b), ResNetV1d replaces the 7x7 conv in
+    the input stem with three 3x3 convs. And in the downsampling block, a 2x2
+    avg_pool with stride 2 is added before conv, whose stride is changed to 1.
+    """
+
+    def __init__(self, **kwargs):
+        super(ResNetV1d_sp, self).__init__(
             deep_stem=True, avg_down=True, **kwargs)

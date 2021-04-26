@@ -13,7 +13,7 @@ import os
 from sklearn import metrics
 
 @DATASETS.register_module()
-class hyper_rgb(CustomDataset):
+class hyper(CustomDataset):
     """Pascal VOC dataset.
 
     Args:
@@ -25,8 +25,8 @@ class hyper_rgb(CustomDataset):
     PALETTE = [[0, 0, 0], [255, 255, 255]]
 
     def __init__(self, split, **kwargs):
-        super(hyper_rgb, self).__init__(
-            img_suffix='.png', seg_map_suffix='.png', split=split, **kwargs)
+        super(hyper, self).__init__(
+            img_suffix='.hdr', seg_map_suffix='.png', split=split, **kwargs)
         assert osp.exists(self.img_dir) and self.split is not None
 
 
