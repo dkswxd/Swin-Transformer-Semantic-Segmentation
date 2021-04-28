@@ -112,20 +112,13 @@ class LoadENVIHyperSpectralImageFromFile(object):
                  channel_select,
                  dataset_name='cholangiocarcinoma',
                  to_float32=True,
-                 normalization=True):
-        channel_select = channel_select.split(':')
+                 normalization=True,
+                 channel_to_show=(10, 20, 30)):
         self.to_float32 = to_float32
         self.normalization = normalization
-        if len(channel_select) == 1:
-            channel_select_start, channel_select_end, channel_select_step = 0, int(channel_select[0]), 1
-        elif len(channel_select) == 2:
-            channel_select_start, channel_select_end, channel_select_step = int(channel_select[0]), int(channel_select[1]), 1
-        elif len(channel_select) == 3:
-            channel_select_start, channel_select_end, channel_select_step = int(channel_select[0]), int(channel_select[1]), int(channel_select[2])
-        else:
-            channel_select_start, channel_select_end, channel_select_step = 0, int(channel_select), 1
         self.dataset_name = dataset_name
-        self.channel_select = range(channel_select_start, channel_select_end, channel_select_step)
+        self.channel_select = channel_select
+        self.channel_to_show = channel_to_show
         self.ENVI_data_type = [None,
                                np.uint8,     # 1
                                np.int16,     # 2
@@ -212,6 +205,7 @@ class LoadENVIHyperSpectralImageFromFile(object):
         results['pad_shape'] = img_bytes.shape
         results['scale_factor'] = 1.0
         results['channel_select'] = self.channel_select
+        results['channel_to_show'] = self.channel_to_show
         num_channels = 1 if len(img_bytes.shape) < 3 else img_bytes.shape[2]
         mean = np.ones(num_channels, dtype=np.float32)*128
         std = np.ones(num_channels, dtype=np.float32)*16

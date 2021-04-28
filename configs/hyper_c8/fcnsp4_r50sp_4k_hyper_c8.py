@@ -6,8 +6,8 @@ norm_cfg = dict(type='BN', track_running_stats=True, requires_grad=True)
 
 model = dict(
     backbone=dict(norm_cfg=norm_cfg,in_channels=3),
-    decode_head=dict(num_classes=2,norm_cfg=norm_cfg,sp_s=8),
-    auxiliary_head=dict(num_classes=2,norm_cfg=norm_cfg,sp_s=8))
+    decode_head=dict(num_classes=2,norm_cfg=norm_cfg,num_sp=4,sp_s=8),
+    auxiliary_head=dict(num_classes=2,norm_cfg=norm_cfg,num_sp=2,sp_s=8))
 
 data = dict(
     samples_per_gpu=2,

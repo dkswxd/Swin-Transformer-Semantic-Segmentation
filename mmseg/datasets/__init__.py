@@ -10,7 +10,7 @@ from .pascal_context import PascalContextDataset
 from .stare import STAREDataset
 from .voc import PascalVOCDataset
 
-from .hyper_c3 import hyper_rgb
+from .hyper_rgb import hyper_rgb
 from .hyper import hyper
 
 __all__ = [
