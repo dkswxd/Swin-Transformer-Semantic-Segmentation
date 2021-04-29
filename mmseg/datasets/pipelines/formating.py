@@ -257,7 +257,7 @@ class Collect(object):
                  keys,
                  meta_keys=('filename', 'ori_filename', 'ori_shape',
                             'img_shape', 'pad_shape', 'scale_factor', 'flip',
-                            'flip_direction', 'img_norm_cfg')):
+                            'flip_direction', 'img_norm_cfg', )):
         self.keys = keys
         self.meta_keys = meta_keys
 
@@ -278,6 +278,9 @@ class Collect(object):
         img_meta = {}
         for key in self.meta_keys:
             img_meta[key] = results[key]
+        if 'channel_select' in results.keys():
+            img_meta['channel_select'] = results['channel_select']
+            img_meta['channel_to_show'] = results['channel_to_show']
         data['img_metas'] = DC(img_meta, cpu_only=True)
         for key in self.keys:
             data[key] = results[key]

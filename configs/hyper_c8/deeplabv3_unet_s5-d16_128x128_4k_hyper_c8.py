@@ -6,7 +6,7 @@ _base_ = [
 norm_cfg = dict(type='BN', requires_grad=True)
 
 model = dict(
-    backbone=dict(norm_cfg=norm_cfg,with_cp=True),
+    backbone=dict(norm_cfg=norm_cfg,with_cp=True,in_channels=8),
     decode_head=dict(num_classes=2,norm_cfg=norm_cfg),
     auxiliary_head=dict(num_classes=2,norm_cfg=norm_cfg),
     test_cfg=dict(crop_size=(128, 128), stride=(85, 85)))
