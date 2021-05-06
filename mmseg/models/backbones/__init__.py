@@ -9,9 +9,10 @@ from .resnet import ResNet_sp, ResNetV1c_sp, ResNetV1d_sp
 from .resnext import ResNeXt
 from .unet import UNet
 from .swin_transformer import SwinTransformer
+from .swin_transformer_3d import SwinTransformer3D
 
 __all__ = [
-    'ResNet', 'ResNetV1c', 'ResNetV1d', 'ResNeXt', 'HRNet', 'FastSCNN',
+    'ResNet', 'ResNetV1c', 'ResNetV1d', 'ResNeXt', 'HRNet', 'FastSCNN', 'SwinTransformer3D',
     'ResNeSt', 'MobileNetV2', 'UNet', 'CGNet', 'MobileNetV3', 'SwinTransformer',
     'ResNet_sp', 'ResNetV1c_sp', 'ResNetV1d_sp',
 ]

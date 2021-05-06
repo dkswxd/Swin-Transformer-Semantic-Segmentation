@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/models/upernet_swin.py', '../_base_/datasets/hyper_c8.py',
+    '../_base_/models/upernet_swin.py', '../_base_/datasets/hyper_c32.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_4k.py'
 ]
 norm_cfg = dict(type='BN', requires_grad=True)
@@ -13,7 +13,7 @@ model = dict(
         drop_path_rate=0.3,
         patch_norm=True,
         use_checkpoint=False,
-        in_chans=8
+        in_chans=32
     ),
     decode_head=dict(
         in_channels=[96, 192, 384, 768],
