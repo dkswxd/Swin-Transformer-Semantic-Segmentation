@@ -65,7 +65,7 @@ def window_reverse(windows, window_size, S, H, W):
     Returns:
         x: (B, S, H, W, C)
     """
-    B = int(windows.shape[0] / (S * H * W / window_size / window_size))
+    B = int(windows.shape[0] / (S * H * W / window_size / window_size / window_size))
     x = windows.view(B, S // window_size, H // window_size, W // window_size, window_size, window_size, window_size, -1)
     x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous().view(B, H, W, -1)
     return x
@@ -228,7 +228,7 @@ class SwinTransformerBlock(nn.Module):
 
         # cyclic shift
         if self.shift_size > 0:
-            shifted_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
+            shifted_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size, -self.shift_size), dims=(1, 2, 3))
             attn_mask = mask_matrix
         else:
             shifted_x = x
@@ -243,18 +243,18 @@ class SwinTransformerBlock(nn.Module):
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, self.window_size, C)
-        shifted_x = window_reverse(attn_windows, self.window_size, Hp, Wp)  # B H' W' C
+        shifted_x = window_reverse(attn_windows, self.window_size, Sp, Hp, Wp)  # B H' W' C
 
         # reverse cyclic shift
         if self.shift_size > 0:
-            x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
+            x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size, self.shift_size), dims=(1, 2, 3))
         else:
             x = shifted_x
 
         if pad_r > 0 or pad_b > 0:
-            x = x[:, :H, :W, :].contiguous()
+            x = x[:, :, :H, :W, :].contiguous()
 
-        x = x.view(B, H * W, C)
+        x = x.view(B, S * H * W, C)
 
         # FFN
         x = shortcut + self.drop_path(x)
@@ -693,7 +693,8 @@ class SwinTransformer3D(nn.Module):
                 norm_layer = getattr(self, f'norm{i}')
                 x_out = norm_layer(x_out)
 
-                out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3).view(-1, self.num_features[i] * S, H, W).contiguous()
+                out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3).contiguous()
+                out = out.view(-1, self.num_features[i] * S, H, W).contiguous()
                 outs.append(out)
 
         return tuple(outs)

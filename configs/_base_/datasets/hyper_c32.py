@@ -17,7 +17,7 @@ train_pipeline = [
     dict(type='Collect', keys=['img', 'gt_semantic_seg']),
 ]
 test_pipeline = [
-    dict(type='LoadENVIHyperSpectralImageFromFile',channel_select=range(5,45,5)),#[5, 10, 15, 20, 25, 30, 35, 40]
+    dict(type='LoadENVIHyperSpectralImageFromFile',channel_select=range(5,37)),#[5, 10, 15, 20, 25, 30, 35, 40]
     dict(
         type='MultiScaleFlipAug',
         img_scale=(640, 640),
