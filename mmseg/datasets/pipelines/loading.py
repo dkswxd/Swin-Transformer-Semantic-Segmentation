@@ -2,6 +2,7 @@ import os.path as osp
 
 import mmcv
 import numpy as np
+import cv2
 
 from ..builder import PIPELINES
 
@@ -113,12 +114,14 @@ class LoadENVIHyperSpectralImageFromFile(object):
                  dataset_name='cholangiocarcinoma',
                  to_float32=True,
                  normalization=True,
-                 channel_to_show=(10, 20, 30)):
+                 channel_to_show=(10, 20, 30),
+                 median_blur=True):
         self.to_float32 = to_float32
         self.normalization = normalization
         self.dataset_name = dataset_name
         self.channel_select = channel_select
         self.channel_to_show = channel_to_show
+        self.median_blur = median_blur
         self.ENVI_data_type = [None,
                                np.uint8,     # 1
                                np.int16,     # 2
@@ -195,6 +198,9 @@ class LoadENVIHyperSpectralImageFromFile(object):
                 # img_bytes -= 128
                 # img_bytes /= 16
                 ##############################################
+        if self.median_blur:
+            for band in range(img_bytes.shape[0]):
+                img_bytes[band, :, :] = cv2.medianBlur(img_bytes[band, :, :], ksize=3)
 
         results['filename'] = filename.replace('.hdr', '.png')
         results['ori_filename'] = results['img_info']['filename'].replace('.hdr', '.png')
