@@ -1,27 +1,28 @@
 _base_ = [
-    '../_base_/models/upernet_swin.py', '../_base_/datasets/hyper_c8.py',
+    '../_base_/models/upernet_swin3d.py', '../_base_/datasets/hyper_c8.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_4k.py'
 ]
 norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     backbone=dict(
         embed_dim=96,
-        depths=[2, 2, 18, 2],
+        depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
-        window_size=7,
+        window_size=(4, 4, 4),
+        patch_size=(1, 4, 4),
         ape=False,
         drop_path_rate=0.3,
         patch_norm=True,
-        use_checkpoint=False,
-        in_chans=8
+        use_checkpoint=True,
+        in_chans=1
     ),
     decode_head=dict(
-        in_channels=[96, 192, 384, 768],
+        in_channels=[96 * 8, 192 * 8, 384 * 8, 768 * 8],
         num_classes=2,
         norm_cfg=norm_cfg
     ),
     auxiliary_head=dict(
-        in_channels=384,
+        in_channels=384 * 8,
         num_classes=2,
         norm_cfg=norm_cfg
     ))

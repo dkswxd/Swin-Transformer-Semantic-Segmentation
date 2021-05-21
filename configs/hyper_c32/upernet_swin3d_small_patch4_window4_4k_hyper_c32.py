@@ -8,7 +8,8 @@ model = dict(
         embed_dim=96,
         depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
-        window_size=4,
+        window_size=(4, 4, 4),
+        patch_size=(4, 4, 4),
         ape=False,
         drop_path_rate=0.3,
         patch_norm=True,
@@ -36,7 +37,7 @@ lr_config = dict(_delete_=True, policy='poly',
                  warmup='linear',
                  warmup_iters=1500,
                  warmup_ratio=1e-6,
-                 power=1.0, min_lr=0.0, by_epoch=False)
+                 power=0.9, min_lr=0.00001, by_epoch=False)
 
 # By default, models are trained on 8 GPUs with 2 images per GPU
 

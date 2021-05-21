@@ -170,6 +170,22 @@ def main():
 def eval_best(work_dir,log_filename, metric):
     iteration = 0
     best_metric = -float('inf')
+    latest_iteration = 0
+    with open(log_filename) as f:
+        for line in f.readlines():
+            if not line.startswith('2021'):
+                continue
+            parse_line = line.strip().split(' ')
+            if len(parse_line) < 8:
+                continue
+            if parse_line[7] == 'Saving':
+                iteration = int(parse_line[10])
+                latest_iteration = iteration
+            if parse_line[7].startswith(metric):
+                current_metric = float(parse_line[7].split(':')[1])
+                if current_metric > best_metric:
+                    mmcv.symlink(f'iter_{iteration}.pth', osp.join(work_dir, 'eval_best.pth'))
+                    best_metric = current_metric
     with open(log_filename) as f:
         for line in f.readlines():
             if not line.startswith('2021'):
@@ -181,9 +197,8 @@ def eval_best(work_dir,log_filename, metric):
                 iteration = int(parse_line[10])
             if parse_line[7].startswith(metric):
                 current_metric = float(parse_line[7].split(':')[1])
-                if current_metric > best_metric:
-                    mmcv.symlink(f'iter_{iteration}.pth', osp.join(work_dir, 'eval_best.pth'))
-                    best_metric = current_metric
+                if current_metric != best_metric and iteration != latest_iteration:
+                    os.remove(osp.join(work_dir, f'iter_{iteration}.pth'))
 
     pass
 
