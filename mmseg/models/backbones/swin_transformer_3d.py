@@ -67,7 +67,7 @@ def window_reverse(windows, window_size, S, H, W):
     """
     B = int(windows.shape[0] / (S * H * W / window_size[0] / window_size[1] / window_size[2]))
     x = windows.view(B, S // window_size[0], H // window_size[1], W // window_size[2], window_size[0], window_size[1], window_size[2], -1)
-    x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous().view(B, H, W, -1)
+    x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous().view(B, S, H, W, -1)
     return x
 
 
@@ -253,8 +253,8 @@ class SwinTransformerBlock(nn.Module):
         else:
             x = shifted_x
 
-        if pad_r > 0 or pad_b > 0:
-            x = x[:, :, :H, :W, :].contiguous()
+        if pad_r > 0 or pad_b > 0 or pad_d > 0:
+            x = x[:, :S, :H, :W, :].contiguous()
 
         x = x.view(B, S * H * W, C)
 
@@ -272,11 +272,12 @@ class PatchMerging(nn.Module):
         dim (int): Number of input channels.
         norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
-    def __init__(self, dim, norm_layer=nn.LayerNorm):
+    def __init__(self, dim, norm_layer=nn.LayerNorm, down_sample_size=(1, 2, 2)):
         super().__init__()
         self.dim = dim
-        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-        self.norm = norm_layer(4 * dim)
+        self.reduction = nn.Linear(down_sample_size[0] * down_sample_size[1] * down_sample_size[2] * dim, 2 * dim, bias=False)
+        self.norm = norm_layer(down_sample_size[0] * down_sample_size[1] * down_sample_size[2] * dim)
+        self.down_sample_size = down_sample_size
 
     def forward(self, x, S, H, W):
         """ Forward function.
@@ -289,18 +290,35 @@ class PatchMerging(nn.Module):
         assert L == S * H * W, "input feature has wrong size"
 
         x = x.view(B, S, H, W, C)
+        if self.down_sample_size == (1, 2, 2):
+            # padding
+            pad_input = (H % 2 == 1) or (W % 2 == 1)
+            if pad_input:
+                x = F.pad(x, [0, 0, 0, W % 2, 0, H % 2,])
 
-        # padding
-        pad_input = (H % 2 == 1) or (W % 2 == 1)
-        if pad_input:
-            x = F.pad(x, [0, 0, 0, W % 2, 0, H % 2,])
+            x0 = x[:, :, 0::2, 0::2, :]  # B S H/2 W/2 C
+            x1 = x[:, :, 1::2, 0::2, :]  # B S H/2 W/2 C
+            x2 = x[:, :, 0::2, 1::2, :]  # B S H/2 W/2 C
+            x3 = x[:, :, 1::2, 1::2, :]  # B S H/2 W/2 C
+            x = torch.cat([x0, x1, x2, x3], -1)  # B S H/2 W/2 8*C
+            x = x.view(B, -1, 4 * C)  # B S*H/2*W/2 4*C
+        elif self.down_sample_size == (2, 2, 2):
+            # padding
+            pad_input = (H % 2 == 1) or (W % 2 == 1) or (S % 2 == 1)
+            if pad_input:
+                x = F.pad(x, [0, 0, 0, W % 2, 0, H % 2, 0, S % 2])
 
-        x0 = x[:, :, 0::2, 0::2, :]  # B S H/2 W/2 C
-        x1 = x[:, :, 1::2, 0::2, :]  # B S H/2 W/2 C
-        x2 = x[:, :, 0::2, 1::2, :]  # B S H/2 W/2 C
-        x3 = x[:, :, 1::2, 1::2, :]  # B S H/2 W/2 C
-        x = torch.cat([x0, x1, x2, x3], -1)  # B S H/2 W/2 8*C
-        x = x.view(B, -1, 4 * C)  # B S*H/2*W/2 4*C
+            x0 = x[:, 0::2, 0::2, 0::2, :]  # B S/2 H/2 W/2 C
+            x1 = x[:, 0::2, 1::2, 0::2, :]  # B S/2 H/2 W/2 C
+            x2 = x[:, 0::2, 0::2, 1::2, :]  # B S/2 H/2 W/2 C
+            x3 = x[:, 0::2, 1::2, 1::2, :]  # B S/2 H/2 W/2 C
+            x0_ = x[:, 1::2, 0::2, 0::2, :]  # B S/2 H/2 W/2 C
+            x1_ = x[:, 1::2, 1::2, 0::2, :]  # B S/2 H/2 W/2 C
+            x2_ = x[:, 1::2, 0::2, 1::2, :]  # B S/2 H/2 W/2 C
+            x3_ = x[:, 1::2, 1::2, 1::2, :]  # B S/2 H/2 W/2 C
+            x = torch.cat([x0, x1, x2, x3, x0_, x1_, x2_, x3_], -1)  # B S/2 H/2 W/2 8*C
+            x = x.view(B, -1, 8 * C)  # B S/2*H/2*W/2 4*C
+
 
         x = self.norm(x)
         x = self.reduction(x)
@@ -386,12 +404,14 @@ class BasicLayer(nn.Module):
                  drop_path=0.,
                  norm_layer=nn.LayerNorm,
                  downsample=None,
+                 down_sample_size=(1, 2, 2),
                  use_checkpoint=False):
         super().__init__()
         self.window_size = window_size
         self.shift_size = [x // 2 for x in window_size]
         self.depth = depth
         self.use_checkpoint = use_checkpoint
+        self.down_sample_size = down_sample_size
 
         # build blocks
         self.blocks = nn.ModuleList([
@@ -411,7 +431,7 @@ class BasicLayer(nn.Module):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(dim=dim, norm_layer=norm_layer)
+            self.downsample = downsample(dim=dim, norm_layer=norm_layer, down_sample_size=down_sample_size)
         else:
             self.downsample = None
 
@@ -457,8 +477,10 @@ class BasicLayer(nn.Module):
                 x = blk(x, attn_mask)
         if self.downsample is not None:
             x_down = self.downsample(x, S, H, W)
-            # Ws, Wh, Ww = (S + 1) // 2, (H + 1) // 2, (W + 1) // 2
-            Ws, Wh, Ww = S, (H + 1) // 2, (W + 1) // 2
+            if self.down_sample_size == (1, 2, 2):
+                Ws, Wh, Ww = S, (H + 1) // 2, (W + 1) // 2
+            elif self.down_sample_size == (2, 2, 2):
+                Ws, Wh, Ww = (S + 1) // 2, (H + 1) // 2, (W + 1) // 2
             return x, S, H, W, x_down, Ws, Wh, Ww
         else:
             return x, S, H, W, x, S, H, W
@@ -550,6 +572,7 @@ class SwinTransformer3D(nn.Module):
                  depths=(2, 2, 6, 2),
                  num_heads=(3, 6, 12, 24),
                  window_size=(4, 4, 4), # 7
+                 down_sample_size=(1, 2, 2),
                  mlp_ratio=4.,
                  qkv_bias=True,
                  qk_scale=None,
@@ -614,6 +637,7 @@ class SwinTransformer3D(nn.Module):
                 drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
                 norm_layer=norm_layer,
                 downsample=PatchMerging if (i_layer < self.num_layers - 1) else None,
+                down_sample_size=down_sample_size,
                 use_checkpoint=use_checkpoint)
             self.layers.append(layer)
 
