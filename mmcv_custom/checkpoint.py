@@ -340,12 +340,21 @@ def load_checkpoint(model,
             logger.warning(f"Error in loading {table_key}, pass")
         else:
             if L1 != L2:
-                S1 = int(L1 ** 0.5)
-                S2 = int(L2 ** 0.5)
-                table_pretrained_resized = F.interpolate(
-                     table_pretrained.permute(1, 0).view(1, nH1, S1, S1),
-                     size=(S2, S2), mode='bicubic')
-                state_dict[table_key] = table_pretrained_resized.view(nH2, L2).permute(1, 0)
+                try:
+                    S1 = int(L1 ** 0.5)
+                    S2 = int(L2 ** 0.5)
+                    table_pretrained_resized = F.interpolate(
+                         table_pretrained.permute(1, 0).view(1, nH1, S1, S1),
+                         size=(S2, S2), mode='bicubic')
+                    state_dict[table_key] = table_pretrained_resized.view(nH2, L2).permute(1, 0)
+                except:
+                    S1 = int(L1 ** 0.5)
+                    S2 = int(L2 ** 0.34)
+                    table_pretrained_resized = F.interpolate(
+                         table_pretrained.permute(1, 0).view(1, nH1, S1, S1),
+                         size=(S2, S2), mode='bicubic')
+                    table_pretrained_resized = table_pretrained_resized.repeat(S2, 1, 1, 1, 1).permute(1, 2, 3, 4, 0).contiguous()
+                    state_dict[table_key] = table_pretrained_resized.view(nH2, L2).permute(1, 0)
 
     # load state_dict
     load_state_dict(model, state_dict, strict, logger)

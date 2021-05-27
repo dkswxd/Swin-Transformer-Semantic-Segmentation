@@ -70,6 +70,52 @@ def window_reverse(windows, window_size, S, H, W):
     x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous().view(B, S, H, W, -1)
     return x
 
+def dilate_window_partition(x, window_size, dliate_size):
+    """
+    Args:
+        x: (B, S, H, W, C)
+        window_size (tuple(int)): window size
+        dliate_size (tuple(int)): dliate size
+
+    Returns:
+        windows: (num_windows*B, window_size, window_size, C)
+    """
+    B, S, H, W, C = x.shape
+    x = x.view(B, S // dliate_size[0], dliate_size[0], H // dliate_size[1], dliate_size[1], W // dliate_size[2], dliate_size[2], C)
+    x = x.permute(0, 2, 4, 6, 1, 3, 5, 7).contiguous()
+    x = x.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2], S // dliate_size[0], H // dliate_size[1], W // dliate_size[2], C)
+    x = x.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2],
+               S // dliate_size[0] // window_size[0], window_size[0],
+               H // dliate_size[1] // window_size[1], window_size[1],
+               W // dliate_size[2] // window_size[2], window_size[2],
+               C)
+    windows = x.permute(0, 1, 3, 5, 2, 4, 6, 7).contiguous().view(-1, window_size[0], window_size[1], window_size[2], C)
+    return windows
+
+def dilate_window_reverse(windows, window_size, dliate_size, S, H, W):
+    """
+    Args:
+        windows: (num_windows*B, window_size, window_size, C)
+        window_size (tuplr(int)): Window size
+        dliate_size (tuple(int)): dliate size
+        S (int): Spectral of image
+        H (int): Height of image
+        W (int): Width of image
+
+    Returns:
+        x: (B, S, H, W, C)
+    """
+    C = windows.shape[-1]
+    B = int(windows.shape[0] / (S * H * W / window_size[0] / window_size[1] / window_size[2]))
+    x = windows.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2],
+                     S // dliate_size[0] // window_size[0],
+                     H // dliate_size[1] // window_size[1],
+                     W // dliate_size[2] // window_size[2],
+                     window_size[0], window_size[1], window_size[2], C)
+    x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous()
+    x = x.view(B, dliate_size[0], dliate_size[1], dliate_size[2], S // dliate_size[0], H // dliate_size[1], W // dliate_size[2], C)
+    x = x.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(B, S, H, W, C)
+    return x
 
 class WindowAttention(nn.Module):
     """ Window based multi-head self attention (W-MSA) module with relative position bias.
@@ -139,7 +185,7 @@ class WindowAttention(nn.Module):
 
         relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
             self.window_size[0] * self.window_size[1] * self.window_size[2],
-            self.window_size[0] * self.window_size[1] * self.window_size[1], -1)  # Ws*Wh*Ww,Ws*Wh*Ww,nH
+            self.window_size[0] * self.window_size[1] * self.window_size[2], -1)  # Ws*Wh*Ww,Ws*Wh*Ww,nH
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Ws*Wh*Ww, Ws*Wh*Ww
         attn = attn + relative_position_bias.unsqueeze(0)
 
@@ -177,7 +223,7 @@ class SwinTransformerBlock(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
 
-    def __init__(self, dim, num_heads, window_size=(4, 4, 4), shift_size=(2, 2, 2),
+    def __init__(self, dim, num_heads, window_size=(4, 4, 4), shift_size=(2, 2, 2), dilate=(1, 2, 2),
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
                  act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
@@ -186,6 +232,7 @@ class SwinTransformerBlock(nn.Module):
         self.window_size = window_size
         self.shift_size = shift_size
         self.mlp_ratio = mlp_ratio
+        self.dilate = dilate
         assert 0 <= self.shift_size[0] < self.window_size[0], "shift_size must in 0-window_size"
         assert 0 <= self.shift_size[1] < self.window_size[1], "shift_size must in 0-window_size"
         assert 0 <= self.shift_size[2] < self.window_size[2], "shift_size must in 0-window_size"
@@ -220,24 +267,53 @@ class SwinTransformerBlock(nn.Module):
         x = self.norm1(x)
         x = x.view(B, S, H, W, C)
 
+        true_size = [_window_size * _dilate for (_window_size, _dilate) in zip(self.window_size, self.dilate)]
+        true_shift = [_shift_size * _dilate for (_shift_size, _dilate) in zip(self.shift_size, self.dilate)]
+
         # pad feature maps to multiples of window size
         pad_l = pad_t = pad_u = 0
-        pad_r = (self.window_size[2] - W % self.window_size[2]) % self.window_size[2]
-        pad_b = (self.window_size[1] - H % self.window_size[1]) % self.window_size[1]
-        pad_d = (self.window_size[0] - S % self.window_size[0]) % self.window_size[0]
+        pad_r = (true_size[2] - W % true_size[2]) % true_size[2]
+        pad_b = (true_size[1] - H % true_size[1]) % true_size[1]
+        pad_d = (true_size[0] - S % true_size[0]) % true_size[0]
         x = F.pad(x, [0, 0, pad_l, pad_r, pad_t, pad_b, pad_u, pad_d])
         _, Sp, Hp, Wp, _ = x.shape
 
         # cyclic shift
         if self.shift_size[0] > 0 or self.shift_size[1] > 0 or self.shift_size[2] > 0:
-            shifted_x = torch.roll(x, shifts=[-xxx for xxx in self.shift_size], dims=(1, 2, 3))
-            attn_mask = mask_matrix
+
+            Sp = int(np.ceil(S / true_size[0])) * true_size[0]
+            Hp = int(np.ceil(H / true_size[1])) * true_size[1]
+            Wp = int(np.ceil(W / true_size[2])) * true_size[2]
+            img_mask = torch.zeros((1, Sp, Hp, Wp, 1), device=x.device)  # 1 Sp Hp Wp 1
+            s_slices = (slice(0, -true_size[0]),
+                        slice(-true_size[0], -true_shift[0]),
+                        slice(-true_shift[0], None))
+            h_slices = (slice(0, -true_size[1]),
+                        slice(-true_size[1], -true_shift[1]),
+                        slice(-true_shift[1], None))
+            w_slices = (slice(0, -true_size[2]),
+                        slice(-true_size[2], -true_shift[2]),
+                        slice(-true_shift[2], None))
+            cnt = 0
+            for s in s_slices:
+                for h in h_slices:
+                    for w in w_slices:
+                        img_mask[:, s, h, w, :] = cnt
+                        cnt += 1
+
+            mask_windows = dilate_window_partition(img_mask, self.window_size,
+                                                   self.dilate)  # nW, window_size, window_size, window_size, 1
+            mask_windows = mask_windows.view(-1, self.window_size[0] * self.window_size[1] * self.window_size[2])
+            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+
+            shifted_x = torch.roll(x, shifts=[-_true_shift for _true_shift in true_shift], dims=(1, 2, 3))
         else:
             shifted_x = x
             attn_mask = None
 
         # partition windows
-        x_windows = window_partition(shifted_x, self.window_size)  # nW*B, window_size, window_size, window_size, C
+        x_windows = dilate_window_partition(shifted_x, self.window_size, self.dilate)  # nW*B, window_size, window_size, window_size, C
         x_windows = x_windows.view(-1, self.window_size[0] * self.window_size[1] * self.window_size[2], C)  # nW*B, window_size*window_size*window_size, C
 
         # W-MSA/SW-MSA
@@ -245,11 +321,11 @@ class SwinTransformerBlock(nn.Module):
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size[0], self.window_size[1], self.window_size[2], C)
-        shifted_x = window_reverse(attn_windows, self.window_size, Sp, Hp, Wp)  # B H' W' C
+        shifted_x = dilate_window_reverse(attn_windows, self.window_size, self.dilate, Sp, Hp, Wp)  # B H' W' C
 
         # reverse cyclic shift
         if self.shift_size[0] > 0 or self.shift_size[1] > 0 or self.shift_size[2] > 0:
-            x = torch.roll(shifted_x, shifts=[xxx for xxx in self.shift_size], dims=(1, 2, 3))
+            x = torch.roll(shifted_x, shifts=[_true_shift for _true_shift in true_shift], dims=(1, 2, 3))
         else:
             x = shifted_x
 
@@ -396,6 +472,7 @@ class BasicLayer(nn.Module):
                  depth,
                  num_heads,
                  window_size=(4, 4, 4),
+                 dilate=(1, 2, 2),
                  mlp_ratio=4.,
                  qkv_bias=True,
                  qk_scale=None,
@@ -412,6 +489,7 @@ class BasicLayer(nn.Module):
         self.depth = depth
         self.use_checkpoint = use_checkpoint
         self.down_sample_size = down_sample_size
+        self.dilate = dilate
 
         # build blocks
         self.blocks = nn.ModuleList([
@@ -420,6 +498,7 @@ class BasicLayer(nn.Module):
                 num_heads=num_heads,
                 window_size=window_size,
                 shift_size=(0, 0, 0) if (i % 2 == 0) else self.shift_size,
+                dilate=(1, 1, 1) if (i % 4 == 0 or i % 4 == 1) else dilate,
                 mlp_ratio=mlp_ratio,
                 qkv_bias=qkv_bias,
                 qk_scale=qk_scale,
@@ -443,20 +522,22 @@ class BasicLayer(nn.Module):
             H, W: Spatial resolution of the input feature.
         """
 
+        true_size = [_window_size * _dilate for (_window_size, _dilate) in zip(self.window_size, self.dilate)]
+        true_shift = [_shift_size * _dilate for (_shift_size, _dilate) in zip(self.shift_size, self.dilate)]
         # calculate attention mask for SW-MSA
-        Sp = int(np.ceil(S / self.window_size[0])) * self.window_size[0]
-        Hp = int(np.ceil(H / self.window_size[1])) * self.window_size[1]
-        Wp = int(np.ceil(W / self.window_size[2])) * self.window_size[2]
+        Sp = int(np.ceil(S / true_size[0])) * true_size[0]
+        Hp = int(np.ceil(H / true_size[1])) * true_size[1]
+        Wp = int(np.ceil(W / true_size[2])) * true_size[2]
         img_mask = torch.zeros((1, Sp, Hp, Wp, 1), device=x.device)  # 1 Sp Hp Wp 1
-        s_slices = (slice(0, -self.window_size[0]),
-                    slice(-self.window_size[0], -self.shift_size[0]),
-                    slice(-self.shift_size[0], None))
-        h_slices = (slice(0, -self.window_size[1]),
-                    slice(-self.window_size[1], -self.shift_size[1]),
-                    slice(-self.shift_size[1], None))
-        w_slices = (slice(0, -self.window_size[2]),
-                    slice(-self.window_size[2], -self.shift_size[2]),
-                    slice(-self.shift_size[2], None))
+        s_slices = (slice(0, -true_size[0]),
+                    slice(-true_size[0], -true_shift[0]),
+                    slice(-true_shift[0], None))
+        h_slices = (slice(0, -true_size[1]),
+                    slice(-true_size[1], -true_shift[1]),
+                    slice(-true_shift[1], None))
+        w_slices = (slice(0, -true_size[2]),
+                    slice(-true_size[2], -true_shift[2]),
+                    slice(-true_shift[2], None))
         cnt = 0
         for s in s_slices:
             for h in h_slices:
@@ -464,7 +545,7 @@ class BasicLayer(nn.Module):
                     img_mask[:, s, h, w, :] = cnt
                     cnt += 1
 
-        mask_windows = window_partition(img_mask, self.window_size)  # nW, window_size, window_size, window_size, 1
+        mask_windows = dilate_window_partition(img_mask, self.window_size, self.dilate)  # nW, window_size, window_size, window_size, 1
         mask_windows = mask_windows.view(-1, self.window_size[0] * self.window_size[1] * self.window_size[2])
         attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
         attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
@@ -572,6 +653,7 @@ class SwinTransformer3D(nn.Module):
                  depths=(2, 2, 6, 2),
                  num_heads=(3, 6, 12, 24),
                  window_size=(4, 4, 4), # 7
+                 dilate=(1, 2, 2),
                  down_sample_size=(1, 2, 2),
                  mlp_ratio=4.,
                  qkv_bias=True,
@@ -629,6 +711,7 @@ class SwinTransformer3D(nn.Module):
                 depth=depths[i_layer],
                 num_heads=num_heads[i_layer],
                 window_size=window_size,
+                dilate=dilate,
                 mlp_ratio=mlp_ratio,
                 qkv_bias=qkv_bias,
                 qk_scale=qk_scale,

@@ -8,8 +8,8 @@ model = dict(
         embed_dim=96,
         depths=[2, 2, 18, 2],
         num_heads=[3, 6, 12, 24],
-        window_size=(6, 6, 6),
-        patch_size=(4, 4, 4),
+        window_size=(1, 7, 7),
+        patch_size=(32, 4, 4),
         ape=False,
         drop_path_rate=0.3,
         patch_norm=True,
@@ -17,12 +17,12 @@ model = dict(
         in_chans=1
     ),
     decode_head=dict(
-        in_channels=[96 * 8, 192 * 8, 384 * 8, 768 * 8],
+        in_channels=[96, 192, 384, 768],
         num_classes=2,
         norm_cfg=norm_cfg
     ),
     auxiliary_head=dict(
-        in_channels=384 * 8,
+        in_channels=384,
         num_classes=2,
         norm_cfg=norm_cfg
     ))
