@@ -110,9 +110,11 @@ class hyper(CustomDataset):
             con_mat += metrics.confusion_matrix(gt.flatten(), result.flatten(), labels=[1, 0])
         print_log('accuracy:{}'.format(accuracy(con_mat)), logger=logger)
         print_log('kappa:{}'.format(kappa(con_mat)), logger=logger)
-        print_log('precision:{}'.format(precision(con_mat)), logger=logger)
-        print_log('sensitivity:{}'.format(sensitivity(con_mat)), logger=logger)
-        print_log('specificity:{}'.format(specificity(con_mat)), logger=logger)
+        print_log('mIoU:{}'.format(ret_metrics_mean[2]), logger=logger)
+        print_log('mDice:{}'.format(ret_metrics_mean[3]), logger=logger)
+        # print_log('precision:{}'.format(precision(con_mat)), logger=logger)
+        # print_log('sensitivity:{}'.format(sensitivity(con_mat)), logger=logger)
+        # print_log('specificity:{}'.format(specificity(con_mat)), logger=logger)
 
         return eval_results
 

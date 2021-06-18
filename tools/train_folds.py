@@ -165,7 +165,7 @@ def main():
             timestamp=timestamp,
             meta=meta)
 
-        eval_best(cfg.work_dir, logger.handlers[1].baseFilename, 'kappa')
+        eval_best(cfg.work_dir, logger.handlers[1].baseFilename, 'mIoU')
 
 def eval_best(work_dir,log_filename, metric):
     iteration = 0
