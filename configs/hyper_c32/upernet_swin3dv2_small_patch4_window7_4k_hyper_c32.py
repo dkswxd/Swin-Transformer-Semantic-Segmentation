@@ -6,8 +6,8 @@ norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     backbone=dict(
         embed_dim=96,
-        depths=[3, 3, 12, 3],
-        num_heads=[3, 6, 12, 24],
+        depths=[2, 2, 18, 2],
+        num_heads=[1, 2, 4, 6],
         window_size=((1, 7, 7), (1, 7, 7), (8, 1, 1)),
         shift=((0, 0, 0), (0, 4, 4), (0, 0, 0)),
         dilate=((1, 1, 1), (1, 1, 1), (1, 1, 1)),
