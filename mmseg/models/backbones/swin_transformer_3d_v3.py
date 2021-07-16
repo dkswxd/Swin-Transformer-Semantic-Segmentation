@@ -170,7 +170,7 @@ class WindowAttention(nn.Module):
         # self.qkv = nn.Conv2d(dim, dim * 3, 3, padding=1, bias=qkv_bias)
         # self.qkv = DeformConv2dPack(dim, dim * 3, 1)
         self.qkv = nn.Conv2d(dim, dim * 3, 1, bias=qkv_bias)
-        # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        # self.qkv = nn.Linear(dim_bi, dim * 3, bias=qkvas)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)

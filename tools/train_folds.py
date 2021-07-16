@@ -64,7 +64,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    for fold in range(args.folds):
+    for fold in range(4,args.folds):
 
         cfg = Config.fromfile(args.config)
 

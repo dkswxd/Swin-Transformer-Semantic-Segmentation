@@ -5,6 +5,7 @@ _base_ = [
 norm_cfg = dict(type='BN', requires_grad=True)
 
 model = dict(
+    pretrained=None,
     backbone=dict(norm_cfg=norm_cfg,in_channels=32),
     decode_head=dict(num_classes=2,norm_cfg=norm_cfg),
     auxiliary_head=dict(num_classes=2,norm_cfg=norm_cfg))

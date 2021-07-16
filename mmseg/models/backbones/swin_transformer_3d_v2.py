@@ -81,15 +81,22 @@ def dilate_window_partition(x, window_size, dliate_size):
         windows: (num_windows*B, window_size, window_size, C)
     """
     B, S, H, W, C = x.shape
-    x = x.view(B, S // dliate_size[0], dliate_size[0], H // dliate_size[1], dliate_size[1], W // dliate_size[2], dliate_size[2], C)
-    x = x.permute(0, 2, 4, 6, 1, 3, 5, 7).contiguous()
-    x = x.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2], S // dliate_size[0], H // dliate_size[1], W // dliate_size[2], C)
-    x = x.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2],
-               S // dliate_size[0] // window_size[0], window_size[0],
-               H // dliate_size[1] // window_size[1], window_size[1],
-               W // dliate_size[2] // window_size[2], window_size[2],
+    x = x.view(B,
+               S // dliate_size[0] // window_size[0], dliate_size[0], window_size[0],
+               H // dliate_size[1] // window_size[1], dliate_size[1], window_size[1],
+               W // dliate_size[2] // window_size[2], dliate_size[2], window_size[2],
                C)
-    windows = x.permute(0, 1, 3, 5, 2, 4, 6, 7).contiguous().view(-1, window_size[0], window_size[1], window_size[2], C)
+    # windows = torch.einsum('abcdefghijk->acfibehdgjk', x).contiguous().view(-1, window_size[0], window_size[1], window_size[2], C)
+    windows = x.permute(0, 2, 5, 8, 1, 4, 7, 3, 6, 9, 10).contiguous().view(-1, window_size[0], window_size[1], window_size[2], C)
+    # x = x.view(B, S // dliate_size[0], dliate_size[0], H // dliate_size[1], dliate_size[1], W // dliate_size[2], dliate_size[2], C)
+    # x = x.permute(0, 2, 4, 6, 1, 3, 5, 7).contiguous()
+    # x = x.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2], S // dliate_size[0], H // dliate_size[1], W // dliate_size[2], C)
+    # x = x.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2],
+    #            S // dliate_size[0] // window_size[0], window_size[0],
+    #            H // dliate_size[1] // window_size[1], window_size[1],
+    #            W // dliate_size[2] // window_size[2], window_size[2],
+    #            C)
+    # windows = x.permute(0, 1, 3, 5, 2, 4, 6, 7).contiguous().view(-1, window_size[0], window_size[1], window_size[2], C)
     return windows
 
 def dilate_window_reverse(windows, window_size, dliate_size, S, H, W):
@@ -107,14 +114,21 @@ def dilate_window_reverse(windows, window_size, dliate_size, S, H, W):
     """
     C = windows.shape[-1]
     B = int(windows.shape[0] / (S * H * W / window_size[0] / window_size[1] / window_size[2]))
-    x = windows.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2],
+    x = windows.view(B, dliate_size[0], dliate_size[1], dliate_size[2],
                      S // dliate_size[0] // window_size[0],
                      H // dliate_size[1] // window_size[1],
                      W // dliate_size[2] // window_size[2],
                      window_size[0], window_size[1], window_size[2], C)
-    x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous()
-    x = x.view(B, dliate_size[0], dliate_size[1], dliate_size[2], S // dliate_size[0], H // dliate_size[1], W // dliate_size[2], C)
-    x = x.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(B, S, H, W, C)
+    # x = torch.einsum('abcdefghijk->aebhfcigdjk', x).contiguous().view(B, S, H, W, C)
+    x = x.permute(0, 4, 1, 7, 5, 2, 8, 6, 3, 9, 10).contiguous().view(B, S, H, W, C)
+    # x = windows.view(B * dliate_size[0] * dliate_size[1] * dliate_size[2],
+    #                  S // dliate_size[0] // window_size[0],
+    #                  H // dliate_size[1] // window_size[1],
+    #                  W // dliate_size[2] // window_size[2],
+    #                  window_size[0], window_size[1], window_size[2], C)
+    # x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous()
+    # x = x.view(B, dliate_size[0], dliate_size[1], dliate_size[2], S // dliate_size[0], H // dliate_size[1], W // dliate_size[2], C)
+    # x = x.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(B, S, H, W, C)
     return x
 
 class WindowAttention(nn.Module):
@@ -199,34 +213,8 @@ class WindowAttention(nn.Module):
 
         # cyclic shift
         if self.shift_size[0] > 0 or self.shift_size[1] > 0 or self.shift_size[2] > 0:
-
-            Sp = int(np.ceil(S / true_size[0])) * true_size[0]
-            Hp = int(np.ceil(H / true_size[1])) * true_size[1]
-            Wp = int(np.ceil(W / true_size[2])) * true_size[2]
-            img_mask = torch.zeros((1, Sp, Hp, Wp, 1), device=x.device)  # 1 Sp Hp Wp 1
-            s_slices = (slice(0, -true_size[0]),
-                        slice(-true_size[0], -true_shift[0]),
-                        slice(-true_shift[0], None))
-            h_slices = (slice(0, -true_size[1]),
-                        slice(-true_size[1], -true_shift[1]),
-                        slice(-true_shift[1], None))
-            w_slices = (slice(0, -true_size[2]),
-                        slice(-true_size[2], -true_shift[2]),
-                        slice(-true_shift[2], None))
-            cnt = 0
-            for s in s_slices:
-                for h in h_slices:
-                    for w in w_slices:
-                        img_mask[:, s, h, w, :] = cnt
-                        cnt += 1
-
-            mask_windows = dilate_window_partition(img_mask, self.window_size,
-                                                   self.dilate)  # nW, window_size, window_size, window_size, 1
-            mask_windows = mask_windows.view(-1, self.window_size[0] * self.window_size[1] * self.window_size[2])
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-
             shifted_x = torch.roll(x, shifts=[-_true_shift for _true_shift in true_shift], dims=(1, 2, 3))
+            attn_mask = None
         else:
             shifted_x = x
             attn_mask = None
