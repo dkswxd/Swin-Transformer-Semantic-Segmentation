@@ -2,6 +2,7 @@ _base_ = [
     '../_base_/models/upernet_swin.py', '../_base_/datasets/ade20k.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
 ]
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     backbone=dict(
         embed_dim=96,
@@ -15,11 +16,13 @@ model = dict(
     ),
     decode_head=dict(
         in_channels=[96, 192, 384, 768],
-        num_classes=150
+        num_classes=150,
+        norm_cfg=norm_cfg
     ),
     auxiliary_head=dict(
         in_channels=384,
-        num_classes=150
+        num_classes=150,
+        norm_cfg=norm_cfg
     ))
 
 # AdamW optimizer, no weight decay for position embedding & layer norm in backbone
