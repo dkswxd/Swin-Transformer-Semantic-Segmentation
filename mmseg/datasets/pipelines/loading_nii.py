@@ -86,7 +86,7 @@ class NiiLoadAnnotationsFromFile(object):
 
         gt_semantic_seg = sitk.ReadImage(filename, imageIO="NiftiImageIO")
         # assert results['spacing'] == gt_semantic_seg.GetSpacing()
-        gt_semantic_seg = sitk.GetArrayFromImage(gt_semantic_seg)
+        gt_semantic_seg = sitk.GetArrayFromImage(gt_semantic_seg).astype(np.uint8)
         if self.transpose == 'dhw2hwd':
             gt_semantic_seg = np.transpose(gt_semantic_seg, (1,2,0))
 
