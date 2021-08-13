@@ -41,6 +41,8 @@ def _expand_onehot_labels(labels, label_weights, target_shape, ignore_index):
     if inds[0].numel() > 0:
         if labels.dim() == 3:
             bin_labels[inds[0], labels[valid_mask], inds[1], inds[2]] = 1
+        elif labels.dim() == 4:
+            bin_labels[inds[0], labels[valid_mask], inds[1], inds[2], inds[3]] = 1
         else:
             bin_labels[inds[0], labels[valid_mask]] = 1
 
@@ -79,7 +81,8 @@ def binary_cross_entropy(pred,
     """
     if pred.dim() != label.dim():
         assert (pred.dim() == 2 and label.dim() == 1) or (
-                pred.dim() == 4 and label.dim() == 3), \
+                pred.dim() == 4 and label.dim() == 3) or (
+                pred.dim() == 5 and label.dim() == 4), \
             'Only pred shape [N, C], label shape [N] or pred shape [N, C, ' \
             'H, W], label shape [N, H, W] are supported'
         label, weight = _expand_onehot_labels(label, weight, pred.shape,

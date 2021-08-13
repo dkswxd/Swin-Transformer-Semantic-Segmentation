@@ -325,8 +325,8 @@ class WindowAttention(nn.Module):
         # self.qkv = DeformConv2dPack(dim, dim * 3, 3, padding=1)
         # self.qkv = nn.Conv2d(dim, dim * 3, 3, padding=1, bias=qkv_bias)
         # self.qkv = DeformConv2dPack(dim, dim * 3, 1)
-        self.qkv = nn.Conv2d(dim, dim * 3, 1, bias=qkv_bias)
-        # self.qkv = nn.Linear(dim_bi, dim * 3, bias=qkvas)
+        # self.qkv = nn.Conv2d(dim, dim * 3, 1, bias=qkv_bias)
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -345,11 +345,7 @@ class WindowAttention(nn.Module):
         B, L, C = x.shape
         assert L == S * H * W, "input feature has wrong size"
 
-        x = x.view(B*S, H, W, C).permute(0, 3, 1, 2).contiguous()
-        x = self.qkv(x)
-        C = x.shape[1]
-        x = x.view(B*S, C, H, W).permute(0, 2, 3, 1).view(B, S, H, W, C)
-
+        x = x.view(B, S, H, W, C)
         true_size = [_window_size * _dilate for (_window_size, _dilate) in zip(self.window_size, self.dilate)]
         true_shift = [_shift_size * _dilate for (_shift_size, _dilate) in zip(self.shift_size, self.dilate)]
 
@@ -363,34 +359,8 @@ class WindowAttention(nn.Module):
 
         # cyclic shift
         if self.shift_size[0] > 0 or self.shift_size[1] > 0 or self.shift_size[2] > 0:
-
-            Sp = int(np.ceil(S / true_size[0])) * true_size[0]
-            Hp = int(np.ceil(H / true_size[1])) * true_size[1]
-            Wp = int(np.ceil(W / true_size[2])) * true_size[2]
-            img_mask = torch.zeros((1, Sp, Hp, Wp, 1), device=x.device)  # 1 Sp Hp Wp 1
-            s_slices = (slice(0, -true_size[0]),
-                        slice(-true_size[0], -true_shift[0]),
-                        slice(-true_shift[0], None))
-            h_slices = (slice(0, -true_size[1]),
-                        slice(-true_size[1], -true_shift[1]),
-                        slice(-true_shift[1], None))
-            w_slices = (slice(0, -true_size[2]),
-                        slice(-true_size[2], -true_shift[2]),
-                        slice(-true_shift[2], None))
-            cnt = 0
-            for s in s_slices:
-                for h in h_slices:
-                    for w in w_slices:
-                        img_mask[:, s, h, w, :] = cnt
-                        cnt += 1
-
-            mask_windows = dilate_window_partition(img_mask, self.window_size,
-                                                   self.dilate)  # nW, window_size, window_size, window_size, 1
-            mask_windows = mask_windows.view(-1, self.window_size[0] * self.window_size[1] * self.window_size[2])
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-
             shifted_x = torch.roll(x, shifts=[-_true_shift for _true_shift in true_shift], dims=(1, 2, 3))
+            attn_mask = None
         else:
             shifted_x = x
             attn_mask = None
@@ -404,8 +374,7 @@ class WindowAttention(nn.Module):
 
         #############################################
         B_, N, C = x_windows.shape
-        C = C // 3
-        qkv = x_windows.reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = self.qkv(x_windows).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
         q = q * self.scale
@@ -434,8 +403,6 @@ class WindowAttention(nn.Module):
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size[0], self.window_size[1], self.window_size[2], C)
-
-
         shifted_x = dilate_window_reverse(attn_windows, self.window_size, self.dilate, Sp, Hp, Wp)  # B H' W' C
 
         # reverse cyclic shift
@@ -450,6 +417,123 @@ class WindowAttention(nn.Module):
         x = x.view(B, S * H * W, C)
 
         return x
+
+    # def forward(self, x, S, H, W):
+    #     """ Forward function.
+    #
+    #     Args:
+    #         x: input features with shape of (num_windows*B, N, C)
+    #         mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
+    #     """
+    #
+    #     B, L, C = x.shape
+    #     assert L == S * H * W, "input feature has wrong size"
+    #
+    #     x = x.view(B*S, H, W, C).permute(0, 3, 1, 2).contiguous()
+    #     x = self.qkv(x)
+    #     C = x.shape[1]
+    #     x = x.view(B*S, C, H, W).permute(0, 2, 3, 1).view(B, S, H, W, C)
+    #
+    #     true_size = [_window_size * _dilate for (_window_size, _dilate) in zip(self.window_size, self.dilate)]
+    #     true_shift = [_shift_size * _dilate for (_shift_size, _dilate) in zip(self.shift_size, self.dilate)]
+    #
+    #     # pad feature maps to multiples of window size
+    #     pad_l = pad_t = pad_u = 0
+    #     pad_r = (true_size[2] - W % true_size[2]) % true_size[2]
+    #     pad_b = (true_size[1] - H % true_size[1]) % true_size[1]
+    #     pad_d = (true_size[0] - S % true_size[0]) % true_size[0]
+    #     x = F.pad(x, [0, 0, pad_l, pad_r, pad_t, pad_b, pad_u, pad_d])
+    #     _, Sp, Hp, Wp, _ = x.shape
+    #
+    #     # cyclic shift
+    #     if self.shift_size[0] > 0 or self.shift_size[1] > 0 or self.shift_size[2] > 0:
+    #
+    #         Sp = int(np.ceil(S / true_size[0])) * true_size[0]
+    #         Hp = int(np.ceil(H / true_size[1])) * true_size[1]
+    #         Wp = int(np.ceil(W / true_size[2])) * true_size[2]
+    #         img_mask = torch.zeros((1, Sp, Hp, Wp, 1), device=x.device)  # 1 Sp Hp Wp 1
+    #         s_slices = (slice(0, -true_size[0]),
+    #                     slice(-true_size[0], -true_shift[0]),
+    #                     slice(-true_shift[0], None))
+    #         h_slices = (slice(0, -true_size[1]),
+    #                     slice(-true_size[1], -true_shift[1]),
+    #                     slice(-true_shift[1], None))
+    #         w_slices = (slice(0, -true_size[2]),
+    #                     slice(-true_size[2], -true_shift[2]),
+    #                     slice(-true_shift[2], None))
+    #         cnt = 0
+    #         for s in s_slices:
+    #             for h in h_slices:
+    #                 for w in w_slices:
+    #                     img_mask[:, s, h, w, :] = cnt
+    #                     cnt += 1
+    #
+    #         mask_windows = dilate_window_partition(img_mask, self.window_size,
+    #                                                self.dilate)  # nW, window_size, window_size, window_size, 1
+    #         mask_windows = mask_windows.view(-1, self.window_size[0] * self.window_size[1] * self.window_size[2])
+    #         attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+    #         attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+    #
+    #         shifted_x = torch.roll(x, shifts=[-_true_shift for _true_shift in true_shift], dims=(1, 2, 3))
+    #     else:
+    #         shifted_x = x
+    #         attn_mask = None
+    #
+    #     # partition windows
+    #     x_windows = dilate_window_partition(shifted_x, self.window_size, self.dilate)  # nW*B, window_size, window_size, window_size, C
+    #     x_windows = x_windows.view(-1, self.window_size[0] * self.window_size[1] * self.window_size[2], C)  # nW*B, window_size*window_size*window_size, C
+    #
+    #
+    #
+    #
+    #     #############################################
+    #     B_, N, C = x_windows.shape
+    #     C = C // 3
+    #     qkv = x_windows.reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+    #     q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+    #
+    #     q = q * self.scale
+    #     attn = (q @ k.transpose(-2, -1))
+    #
+    #     relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+    #         self.window_size[0] * self.window_size[1] * self.window_size[2],
+    #         self.window_size[0] * self.window_size[1] * self.window_size[2], -1)  # Ws*Wh*Ww,Ws*Wh*Ww,nH
+    #     relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Ws*Wh*Ww, Ws*Wh*Ww
+    #     attn = attn + relative_position_bias.unsqueeze(0)
+    #
+    #     if attn_mask is not None:
+    #         nW = attn_mask.shape[0]
+    #         attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + attn_mask.unsqueeze(1).unsqueeze(0)
+    #         attn = attn.view(-1, self.num_heads, N, N)
+    #         attn = self.softmax(attn)
+    #     else:
+    #         attn = self.softmax(attn)
+    #
+    #     attn = self.attn_drop(attn)
+    #
+    #     attn_windows = (attn @ v).transpose(1, 2).reshape(B_, N, C)
+    #     attn_windows = self.proj(attn_windows)
+    #     attn_windows = self.proj_drop(attn_windows)
+    #     #############################################
+    #
+    #     # merge windows
+    #     attn_windows = attn_windows.view(-1, self.window_size[0], self.window_size[1], self.window_size[2], C)
+    #
+    #
+    #     shifted_x = dilate_window_reverse(attn_windows, self.window_size, self.dilate, Sp, Hp, Wp)  # B H' W' C
+    #
+    #     # reverse cyclic shift
+    #     if self.shift_size[0] > 0 or self.shift_size[1] > 0 or self.shift_size[2] > 0:
+    #         x = torch.roll(shifted_x, shifts=[_true_shift for _true_shift in true_shift], dims=(1, 2, 3))
+    #     else:
+    #         x = shifted_x
+    #
+    #     if pad_r > 0 or pad_b > 0 or pad_d > 0:
+    #         x = x[:, :S, :H, :W, :].contiguous()
+    #
+    #     x = x.view(B, S * H * W, C)
+    #
+    #     return x
 
 
 class SwinTransformerBlock(nn.Module):
@@ -831,7 +915,8 @@ class SwinTransformer3Dv3(nn.Module):
                  out_indices=(0, 1, 2, 3),
                  frozen_stages=-1,
                  use_checkpoint=False,
-                 image_size=(32, 518, 518)
+                 image_size=(32, 518, 518),
+                 use_spectral_aggregation=True
                  ):
         super().__init__()
 
@@ -843,6 +928,7 @@ class SwinTransformer3Dv3(nn.Module):
         self.patch_norm = patch_norm
         self.out_indices = out_indices
         self.frozen_stages = frozen_stages
+        self.use_spectral_aggregation = use_spectral_aggregation
 
         # split image into non-overlapping patches
         self.patch_embed = PatchEmbed(
@@ -968,7 +1054,8 @@ class SwinTransformer3Dv3(nn.Module):
     def forward(self, x):
         """Forward function."""
         # input x: BxSxHxW
-        x = torch.unsqueeze(x, 1)
+        if self.use_spectral_aggregation:
+            x = torch.unsqueeze(x, 1)
         # unsqueeze x: Bx1xSxHxW
         x = self.patch_embed(x)
 
@@ -990,9 +1077,13 @@ class SwinTransformer3Dv3(nn.Module):
                 norm_layer = getattr(self, f'norm{i}')
                 x_out = norm_layer(x_out)
 
-                out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3).contiguous()
-                out = out.view(-1, self.num_features[i] * S, H, W).contiguous()
-                outs.append(out)
+                if self.use_spectral_aggregation:
+                    out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3).contiguous()
+                    out = out.view(-1, self.num_features[i] * S, H, W).contiguous()
+                    outs.append(out)
+                else:
+                    out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3).contiguous()
+                    outs.append(out)
 
         return tuple(outs)
 

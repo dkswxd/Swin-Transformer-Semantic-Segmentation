@@ -72,6 +72,10 @@ class UPerHead(BaseDecodeHead):
             conv_cfg=self.conv_cfg,
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
+        if self.conv_cfg['type'] == 'Conv3d':
+            self.resize_mode = 'trilinear'
+        else:
+            self.resize_mode = 'bilinear'
 
     def psp_forward(self, inputs):
         """Forward function of PSP module."""
@@ -103,7 +107,7 @@ class UPerHead(BaseDecodeHead):
             laterals[i - 1] += resize(
                 laterals[i],
                 size=prev_shape,
-                mode='bilinear',
+                mode=self.resize_mode,
                 align_corners=self.align_corners)
 
         # build outputs
@@ -118,7 +122,7 @@ class UPerHead(BaseDecodeHead):
             fpn_outs[i] = resize(
                 fpn_outs[i],
                 size=fpn_outs[0].shape[2:],
-                mode='bilinear',
+                mode=self.resize_mode,
                 align_corners=self.align_corners)
         fpn_outs = torch.cat(fpn_outs, dim=1)
         output = self.fpn_bottleneck(fpn_outs)

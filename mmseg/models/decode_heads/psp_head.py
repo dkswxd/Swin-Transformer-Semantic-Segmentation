@@ -31,10 +31,18 @@ class PPM(nn.ModuleList):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.act_cfg = act_cfg
+        if conv_cfg['type'] == 'Conv3d':
+            adaptive_pooling_layer = nn.AdaptiveAvgPool3d
+            self.resize_mode = 'trilinear'
+        else:
+            adaptive_pooling_layer = nn.AdaptiveAvgPool2d
+            self.resize_mode = 'bilinear'
+
+
         for pool_scale in pool_scales:
             self.append(
                 nn.Sequential(
-                    nn.AdaptiveAvgPool2d(pool_scale),
+                    adaptive_pooling_layer(pool_scale),
                     ConvModule(
                         self.in_channels,
                         self.channels,
@@ -51,7 +59,7 @@ class PPM(nn.ModuleList):
             upsampled_ppm_out = resize(
                 ppm_out,
                 size=x.size()[2:],
-                mode='bilinear',
+                mode=self.resize_mode,
                 align_corners=self.align_corners)
             ppm_outs.append(upsampled_ppm_out)
         return ppm_outs

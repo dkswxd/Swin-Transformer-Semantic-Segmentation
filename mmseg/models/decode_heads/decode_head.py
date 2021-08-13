@@ -78,11 +78,19 @@ class BaseDecodeHead(nn.Module, metaclass=ABCMeta):
         else:
             self.sampler = None
 
-        self.conv_seg = nn.Conv2d(channels, num_classes, kernel_size=1)
-        if dropout_ratio > 0:
-            self.dropout = nn.Dropout2d(dropout_ratio)
-        else:
-            self.dropout = None
+        if conv_cfg == None:
+            self.conv_seg = nn.Conv2d(channels, num_classes, kernel_size=1)
+            if dropout_ratio > 0:
+                self.dropout = nn.Dropout2d(dropout_ratio)
+            else:
+                self.dropout = None
+        elif conv_cfg['type'] == 'Conv3d':
+            self.conv_seg = nn.Conv3d(channels, num_classes, kernel_size=1)
+            if dropout_ratio > 0:
+                self.dropout = nn.Dropout3d(dropout_ratio)
+            else:
+                self.dropout = None
+
         self.fp16_enabled = False
 
     def extra_repr(self):
@@ -215,10 +223,14 @@ class BaseDecodeHead(nn.Module, metaclass=ABCMeta):
     def losses(self, seg_logit, seg_label):
         """Compute segmentation loss."""
         loss = dict()
+        if len(seg_logit.shape) == 5:
+            resize_mode = 'trilinear'
+        else:
+            resize_mode = 'bilinear'
         seg_logit = resize(
             input=seg_logit,
             size=seg_label.shape[2:],
-            mode='bilinear',
+            mode=resize_mode,
             align_corners=self.align_corners)
         if self.sampler is not None:
             seg_weight = self.sampler.sample(seg_logit, seg_label)

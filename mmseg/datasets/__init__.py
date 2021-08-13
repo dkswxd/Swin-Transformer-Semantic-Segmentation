@@ -13,9 +13,12 @@ from .voc import PascalVOCDataset
 from .hyper_rgb import hyper_rgb
 from .hyper import hyper
 
+from .lits import LiTS
+
 __all__ = [
     'CustomDataset', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
     'DATASETS', 'build_dataset', 'PIPELINES', 'CityscapesDataset',
     'PascalVOCDataset', 'ADE20KDataset', 'PascalContextDataset',
-    'ChaseDB1Dataset', 'DRIVEDataset', 'HRFDataset', 'STAREDataset', 'hyper_rgb', 'hyper'
+    'ChaseDB1Dataset', 'DRIVEDataset', 'HRFDataset', 'STAREDataset', 'hyper_rgb', 'hyper',
+    'lits.py'
 ]
