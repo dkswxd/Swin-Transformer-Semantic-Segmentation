@@ -12,6 +12,7 @@ from mmseg.core import eval_metrics
 import os
 from sklearn import metrics
 from mmseg.utils import get_root_logger
+import SimpleITK as sitk
 
 @DATASETS.register_module()
 class LiTS(CustomDataset):
@@ -21,12 +22,13 @@ class LiTS(CustomDataset):
         split (str): Split txt file for Pascal VOC.
     """
 
-    CLASSES = ('background', 'liver')
+    CLASSES = ('background', 'liver', 'turmor')
 
     PALETTE = [[0, 0, 0], [0, 255, 0], [0, 0, 255]]
 
     def __init__(self, split, replace=('volume', 'segmentation'), **kwargs):
         self.replace=replace
+        self.transpose = 'dhw2hwd'
         super(LiTS, self).__init__(
             img_suffix='.nii', seg_map_suffix='.nii', split=split, **kwargs)
         assert osp.exists(self.img_dir) and self.split is not None
@@ -61,3 +63,18 @@ class LiTS(CustomDataset):
 
         print_log(f'Loaded {len(img_infos)} images', logger=get_root_logger())
         return img_infos
+
+    def get_gt_seg_maps(self, efficient_test=False):
+        """Get ground truth segmentation maps for evaluation."""
+        gt_seg_maps = []
+        for img_info in self.img_infos:
+            seg_map = osp.join(self.ann_dir, img_info['ann']['seg_map'])
+            if efficient_test:
+                gt_seg_map = seg_map
+            else:
+                gt_seg_map = sitk.ReadImage(seg_map, imageIO="NiftiImageIO")
+                gt_seg_map = sitk.GetArrayFromImage(gt_seg_map)
+                if self.transpose == 'dhw2hwd':
+                    gt_seg_map = np.transpose(gt_seg_map, (1,2,0))
+            gt_seg_maps.append(gt_seg_map)
+        return gt_seg_maps

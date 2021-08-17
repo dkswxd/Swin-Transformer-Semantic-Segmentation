@@ -89,7 +89,7 @@ class EncoderDecoder(BaseSegmentor):
         out = resize(
             input=out,
             size=img.shape[2:],
-            mode='bilinear',
+            mode='bilinear' if len(img.shape)==4 else 'trilinear',
             align_corners=self.align_corners)
         return out
 
@@ -218,8 +218,8 @@ class EncoderDecoder(BaseSegmentor):
         if rescale:
             seg_logit = resize(
                 seg_logit,
-                size=img_meta[0]['ori_shape'][:2],
-                mode='bilinear',
+                size=img_meta[0]['ori_shape'][:2] if len(seg_logit.shape)==4 else img_meta[0]['ori_shape'][:3],
+                mode='bilinear' if len(seg_logit.shape)==4 else 'trilinear',
                 align_corners=self.align_corners,
                 warning=False)
 
@@ -248,21 +248,24 @@ class EncoderDecoder(BaseSegmentor):
             seg_logit = self.slide_inference(img, img_meta, rescale)
         else:
             seg_logit = self.whole_inference(img, img_meta, rescale)
+        torch.cuda.empty_cache()
         output = F.softmax(seg_logit, dim=1)
         flip = img_meta[0]['flip']
         if flip:
             flip_direction = img_meta[0]['flip_direction']
-            assert flip_direction in ['horizontal', 'vertical']
+            assert flip_direction in ['horizontal', 'vertical', 'depth']
             if flip_direction == 'horizontal':
                 output = output.flip(dims=(3, ))
             elif flip_direction == 'vertical':
                 output = output.flip(dims=(2, ))
+            elif flip_direction == 'depth':
+                output = output.flip(dims=(4, ))
 
         return output
 
     def simple_test(self, img, img_meta, rescale=True):
         """Simple test with single image."""
-        seg_logit = self.inference(img, img_meta, rescale)
+        seg_logit = self.inference(img, img_meta, rescale).to(torch.float16)
         seg_pred = seg_logit.argmax(dim=1)
         if torch.onnx.is_in_onnx_export():
             # our inference backend only support 4D output

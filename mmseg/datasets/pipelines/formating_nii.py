@@ -39,6 +39,7 @@ class NiiImageToTensor(object):
         for key in self.keys:
             img = results[key]
             img = np.expand_dims(img, 0)
+            results[key] = to_tensor(img)
         return results
 
     def __repr__(self):

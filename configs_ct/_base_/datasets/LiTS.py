@@ -8,7 +8,7 @@ train_pipeline = [
     dict(type='NiiLoadAnnotationsFromFile'),
     dict(type='NiiSpacingNormalize'),
     dict(type='NiiClipImageValue',min_value=-200,max_value=250),
-    dict(type='NiiResize', ratio_range=(0.5, 2.0)),
+    dict(type='NiiResize', ratio_range=(0.25, 0.75)),
     dict(type='NiiRandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='NiiNormalizeImage'),
     dict(type='NiiRandomFlip', prob=0.5),
@@ -24,7 +24,7 @@ test_pipeline = [
         type='NiiMultiScaleFlipAug',
         img_scale=None,
         # img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-        img_ratios=[1.0],
+        img_ratios=[0.5],
         flip=False,
         transforms=[
             dict(type='NiiResize'),

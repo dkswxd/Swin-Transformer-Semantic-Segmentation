@@ -16,7 +16,8 @@ class NiiSpacingNormalize(object):
         """Resize images with ``results['scale']``."""
         with torch.no_grad():
             img = torch.from_numpy(results['img']).unsqueeze(0).unsqueeze(0)
-            img = F.interpolate(input=img, scale_factor=results['spacing'], mode='trilinear')
+            img = F.interpolate(input=img, scale_factor=results['spacing'], mode='trilinear',
+                                       align_corners=False, recompute_scale_factor=False)
             img = img.numpy().squeeze(0).squeeze(0)
             results['img'] = img
 
@@ -25,7 +26,8 @@ class NiiSpacingNormalize(object):
         with torch.no_grad():
             for key in results.get('seg_fields', []):
                 gt_seg = torch.from_numpy(results[key]).unsqueeze(0).unsqueeze(0)
-                gt_seg = F.interpolate(input=gt_seg, scale_factor=results['spacing'], mode='nearest')
+                gt_seg = F.interpolate(input=gt_seg, scale_factor=results['spacing'], mode='nearest',
+                                       recompute_scale_factor=False)
                 gt_seg = gt_seg.numpy().squeeze(0).squeeze(0)
                 results[key] = gt_seg
 
@@ -70,7 +72,8 @@ class NiiResize(object):
             img = results['img']
             h, w, d = img.shape[:3]
             img = torch.from_numpy(img).unsqueeze(0).unsqueeze(0)
-            img = F.interpolate(input=img, scale_factor=results['scale'], mode='trilinear')
+            img = F.interpolate(input=img, scale_factor=results['scale'], mode='trilinear',
+                                       align_corners=False, recompute_scale_factor=False)
             img = img.numpy().squeeze(0).squeeze(0)
             new_h, new_w, new_d = img.shape[:3]
             w_scale = new_w / w
@@ -90,7 +93,8 @@ class NiiResize(object):
         with torch.no_grad():
             for key in results.get('seg_fields', []):
                 gt_seg = torch.from_numpy(results[key]).unsqueeze(0).unsqueeze(0)
-                gt_seg = F.interpolate(input=gt_seg, scale_factor=results['scale'], mode='nearest')
+                gt_seg = F.interpolate(input=gt_seg, scale_factor=results['scale'], mode='nearest',
+                                       recompute_scale_factor=False)
                 gt_seg = gt_seg.numpy().squeeze(0).squeeze(0)
                 results[key] = gt_seg
 

@@ -55,7 +55,7 @@ class NiiMultiScaleFlipAug(object):
                  img_scale,
                  img_ratios=None,
                  flip=False,
-                 flip_direction=['horizontal', 'vertical', 'depth']):
+                 flip_direction=['horizontal',]):
         self.transforms = Compose(transforms)
         if img_ratios is not None:
             img_ratios = img_ratios if isinstance(img_ratios,
@@ -104,8 +104,8 @@ class NiiMultiScaleFlipAug(object):
 
         aug_data = []
         if self.img_scale is None and mmcv.is_list_of(self.img_ratios, float):
-            h, w = results['img'].shape[:2]
-            img_scale = [(int(w * ratio), int(h * ratio))
+            h, w, d = results['img'].shape[:3]
+            img_scale = [(ratio, ratio, ratio)
                          for ratio in self.img_ratios]
         else:
             img_scale = self.img_scale
