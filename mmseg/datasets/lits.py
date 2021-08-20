@@ -22,7 +22,8 @@ class LiTS(CustomDataset):
         split (str): Split txt file for Pascal VOC.
     """
 
-    CLASSES = ('background', 'liver', 'turmor')
+    # CLASSES = ('background', 'liver', 'turmor')
+    CLASSES = ('background', 'liver')
 
     PALETTE = [[0, 0, 0], [0, 255, 0], [0, 0, 255]]
 
@@ -78,3 +79,11 @@ class LiTS(CustomDataset):
                     gt_seg_map = np.transpose(gt_seg_map, (1,2,0))
             gt_seg_maps.append(gt_seg_map)
         return gt_seg_maps
+
+    def format_results(self, results, **kwargs):
+        assert len(results) == len(self.img_infos)
+        for result, img_info in zip(results, self.img_infos):
+
+            result = sitk.GetImageFromArray(result.astype(np.uint8))
+            sitk.WriteImage(result, os.path.join('./LiTS_val/results',img_info['filename'].replace(*self.replace)))
+

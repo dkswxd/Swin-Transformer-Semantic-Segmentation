@@ -44,8 +44,9 @@ class ResLayer(nn.Sequential):
             conv_stride = stride
             if avg_down:
                 conv_stride = 1
+                AvgPool = nn.AvgPool3d if conv_cfg['type'] == 'Conv3d' else nn.AvgPool2d
                 downsample.append(
-                    nn.AvgPool2d(
+                    AvgPool(
                         kernel_size=stride,
                         stride=stride,
                         ceil_mode=True,

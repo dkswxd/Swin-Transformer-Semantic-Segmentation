@@ -6,50 +6,6 @@ import torch.nn.functional as F
 from ..builder import PIPELINES
 import torch
 
-@PIPELINES.register_module()
-class NiiSpacingNormalize(object):
-    def __init__(self, target_spacing=(1, 1, 1)):
-        self.target_spacing = target_spacing
-
-
-    def _resize_img(self, results):
-        """Resize images with ``results['scale']``."""
-        with torch.no_grad():
-            img = torch.from_numpy(results['img']).unsqueeze(0).unsqueeze(0)
-            img = F.interpolate(input=img, scale_factor=results['spacing'], mode='trilinear',
-                                       align_corners=False, recompute_scale_factor=False)
-            img = img.numpy().squeeze(0).squeeze(0)
-            results['img'] = img
-
-    def _resize_seg(self, results):
-        """Resize semantic segmentation map with ``results['scale']``."""
-        with torch.no_grad():
-            for key in results.get('seg_fields', []):
-                gt_seg = torch.from_numpy(results[key]).unsqueeze(0).unsqueeze(0)
-                gt_seg = F.interpolate(input=gt_seg, scale_factor=results['spacing'], mode='nearest',
-                                       recompute_scale_factor=False)
-                gt_seg = gt_seg.numpy().squeeze(0).squeeze(0)
-                results[key] = gt_seg
-
-    def __call__(self, results):
-        """Call function to resize images, bounding boxes, masks, semantic
-        segmentation map.
-
-        Args:
-            results (dict): Result dict from loading pipeline.
-
-        Returns:
-            dict: Resized results, 'img_shape', 'pad_shape', 'scale_factor',
-                'keep_ratio' keys are added into result dict.
-        """
-        self._resize_img(results)
-        self._resize_seg(results)
-        return results
-
-    def __repr__(self):
-        repr_str = self.__class__.__name__
-        repr_str += f'target_spacing={self.target_spacing},'
-        return repr_str
 
 @PIPELINES.register_module()
 class NiiResize(object):
@@ -59,9 +15,10 @@ class NiiResize(object):
         ratio_range (tuple[float]): (min_ratio, max_ratio)
     """
 
-    def __init__(self, ratio_range=None):
+    def __init__(self, ratio_range=None, target_spacing=(1, 1, 1)):
         if ratio_range is not None:
             self.min_ratio, self.max_ratio = ratio_range
+        self.target_spacing = target_spacing
 
     def _random_scale(self, results):
         results['scale'] = np.random.random_sample() * (self.max_ratio - self.min_ratio) + self.min_ratio
@@ -72,7 +29,9 @@ class NiiResize(object):
             img = results['img']
             h, w, d = img.shape[:3]
             img = torch.from_numpy(img).unsqueeze(0).unsqueeze(0)
-            img = F.interpolate(input=img, scale_factor=results['scale'], mode='trilinear',
+            true_scale = [results['scale'] * ori_spacing / target_spacing
+                          for ori_spacing, target_spacing in zip(results['spacing'], self.target_spacing)]
+            img = F.interpolate(input=img, scale_factor=true_scale, mode='trilinear',
                                        align_corners=False, recompute_scale_factor=False)
             img = img.numpy().squeeze(0).squeeze(0)
             new_h, new_w, new_d = img.shape[:3]
@@ -93,8 +52,7 @@ class NiiResize(object):
         with torch.no_grad():
             for key in results.get('seg_fields', []):
                 gt_seg = torch.from_numpy(results[key]).unsqueeze(0).unsqueeze(0)
-                gt_seg = F.interpolate(input=gt_seg, scale_factor=results['scale'], mode='nearest',
-                                       recompute_scale_factor=False)
+                gt_seg = F.interpolate(input=gt_seg, size=results['img_shape'], mode='nearest')
                 gt_seg = gt_seg.numpy().squeeze(0).squeeze(0)
                 results[key] = gt_seg
 
@@ -121,6 +79,26 @@ class NiiResize(object):
                      f'max_ratio={self.max_ratio},')
         return repr_str
 
+@PIPELINES.register_module()
+class NiiRemoveSlice(object):
+    def __init__(self, expand=20):
+        self.expand = expand
+
+    def __call__(self, results):
+        assert 'gt_semantic_seg' in results['seg_fields']
+        seg = results['gt_semantic_seg']
+        img = results['img']
+
+        seg_z = np.max(seg, axis=(0,1))
+        first_z = np.nonzero(seg_z)[0][0]
+        last_z = np.nonzero(seg_z)[0][-1]
+        first_z = max(0, first_z - self.expand)
+        last_z = min(seg.shape[2], last_z - self.expand + 1)
+
+        results['gt_semantic_seg'] = seg[:, :, first_z:last_z]
+        results['img'] = img[:, :, first_z:last_z]
+        results['img_shape'] = results['img'].shape
+        return results
 
 @PIPELINES.register_module()
 class NiiRandomFlip(object):

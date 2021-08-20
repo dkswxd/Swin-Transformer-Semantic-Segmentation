@@ -105,8 +105,7 @@ class NiiMultiScaleFlipAug(object):
         aug_data = []
         if self.img_scale is None and mmcv.is_list_of(self.img_ratios, float):
             h, w, d = results['img'].shape[:3]
-            img_scale = [(ratio, ratio, ratio)
-                         for ratio in self.img_ratios]
+            img_scale = self.img_ratios
         else:
             img_scale = self.img_scale
         flip_aug = [False, True] if self.flip else [False]

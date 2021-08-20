@@ -577,7 +577,8 @@ class ResNet(nn.Module):
                 self.norm_cfg, stem_channels, postfix=1)
             self.add_module(self.norm1_name, norm1)
             self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        MaxPool = nn.MaxPool3d if self.conv_cfg['type'] == 'Conv3d' else nn.MaxPool2d
+        self.maxpool =MaxPool(kernel_size=3, stride=2, padding=1)
 
     def _freeze_stages(self):
         """Freeze stages param and norm stats."""

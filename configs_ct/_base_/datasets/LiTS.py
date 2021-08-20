@@ -2,13 +2,13 @@
 dataset_type = 'LiTS'
 data_root = '../data/LiTS'
 
-crop_size = (336, 336, 168)
+crop_size = (320, 320, 160)
 train_pipeline = [
     dict(type='NiiLoadImageFromFile'),
-    dict(type='NiiLoadAnnotationsFromFile'),
-    dict(type='NiiSpacingNormalize'),
-    dict(type='NiiClipImageValue',min_value=-200,max_value=250),
-    dict(type='NiiResize', ratio_range=(0.25, 0.75)),
+    dict(type='NiiLoadAnnotationsFromFile',transpose='dhw2hwd',lits_remove_turmor=True),
+    dict(type='NiiClipImageValue',min_value=-200,max_value=200),
+    dict(type='NiiRemoveSlice',expand=20),
+    dict(type='NiiResize', ratio_range=(0.5, 1.5), target_spacing=(1, 1, 1)),
     dict(type='NiiRandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='NiiNormalizeImage'),
     dict(type='NiiRandomFlip', prob=0.5),
@@ -18,13 +18,12 @@ train_pipeline = [
 ]
 test_pipeline = [
     dict(type='NiiLoadImageFromFile'),
-    dict(type='NiiSpacingNormalize'),
-    dict(type='NiiClipImageValue',min_value=-200,max_value=250),
+    dict(type='NiiClipImageValue',min_value=-200,max_value=200),
     dict(
         type='NiiMultiScaleFlipAug',
         img_scale=None,
         # img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-        img_ratios=[0.5],
+        img_ratios=[1.0],
         flip=False,
         transforms=[
             dict(type='NiiResize'),
@@ -54,6 +53,6 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='LITS-Challenge-Test-Data',
-        split='test.txt',
+        img_dir='Training',
+        split='val.txt',
         pipeline=test_pipeline))

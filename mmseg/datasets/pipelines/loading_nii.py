@@ -63,9 +63,10 @@ class NiiLoadAnnotationsFromFile(object):
     """Load annotations for semantic segmentation.
     """
 
-    def __init__(self,reduce_zero_label=False, transpose='dhw2hwd'):
+    def __init__(self,reduce_zero_label=False, transpose='dhw2hwd',lits_remove_turmor=False):
         self.reduce_zero_label = reduce_zero_label
         self.transpose = transpose
+        self.lits_remove_turmor = lits_remove_turmor
 
 
     def __call__(self, results):
@@ -87,6 +88,8 @@ class NiiLoadAnnotationsFromFile(object):
         gt_semantic_seg = sitk.ReadImage(filename, imageIO="NiftiImageIO")
         # assert results['spacing'] == gt_semantic_seg.GetSpacing()
         gt_semantic_seg = sitk.GetArrayFromImage(gt_semantic_seg).astype(np.uint8)
+        if self.lits_remove_turmor:
+            gt_semantic_seg[gt_semantic_seg > 0] = 1
         if self.transpose == 'dhw2hwd':
             gt_semantic_seg = np.transpose(gt_semantic_seg, (1,2,0))
 
