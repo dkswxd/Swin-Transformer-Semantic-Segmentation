@@ -287,8 +287,9 @@ class NiiNormalizeImage(object):
                 result dict.
         """
 
-        results['img'] = results['img'] - results['img'].mean()
-        results['img'] = results['img'] / results['img'].std()
+        # results['img'] = results['img'] - results['img'].mean()
+        # results['img'] = results['img'] / results['img'].std()
+        results['img'] = results['img'] / 200
         results['img_norm_cfg'] = dict(mean=[128], std=[16])
         return results
 

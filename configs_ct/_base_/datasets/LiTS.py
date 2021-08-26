@@ -2,13 +2,13 @@
 dataset_type = 'LiTS'
 data_root = '../data/LiTS'
 
-crop_size = (320, 320, 160)
+crop_size = (320, 320, 80)
 train_pipeline = [
     dict(type='NiiLoadImageFromFile'),
     dict(type='NiiLoadAnnotationsFromFile',transpose='dhw2hwd',lits_remove_turmor=True),
     dict(type='NiiClipImageValue',min_value=-200,max_value=200),
     dict(type='NiiRemoveSlice',expand=20),
-    dict(type='NiiResize', ratio_range=(0.5, 1.5), target_spacing=(1, 1, 1)),
+    dict(type='NiiResize', ratio_range=(0.9, 1.1), target_spacing=(1, 1, 1)),
     dict(type='NiiRandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='NiiNormalizeImage'),
     dict(type='NiiRandomFlip', prob=0.5),
@@ -34,8 +34,8 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=4,
-    workers_per_gpu=4,
+    samples_per_gpu=1,
+    workers_per_gpu=1,
     train=dict(
         type=dataset_type,
         data_root=data_root,

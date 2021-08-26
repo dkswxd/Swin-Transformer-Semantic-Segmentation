@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/models/fcn_r50-d8.py', '../_base_/datasets/LiTS.py',
+    '../_base_/models/upernet_r50.py', '../_base_/datasets/LiTS.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_4k.py'
 ]
 # norm_cfg = dict(type='SyncBN', requires_grad=True)
@@ -16,13 +16,13 @@ model = dict(
         num_classes=2,
         norm_cfg=norm_cfg,
         conv_cfg=conv_cfg,
-        loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0, class_weight=[0.1, 1])
+        loss_decode=dict(type='DC_and_CE_loss', loss_weight=0.4)
     ),
     auxiliary_head=dict(
         num_classes=2,
         norm_cfg=norm_cfg,
         conv_cfg=conv_cfg,
-        loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.4, class_weight=[0.1, 1])
+        loss_decode=dict(type='DC_and_CE_loss', loss_weight=0.4)
     ),
     test_cfg=dict(
         mode='slide',

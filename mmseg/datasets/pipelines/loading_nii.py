@@ -32,7 +32,7 @@ class NiiLoadImageFromFile(object):
             filename = results['img_info']['filename']
 
         img = sitk.ReadImage(filename, imageIO="NiftiImageIO")
-        spacing = img.GetSpacing()
+        spacing = (1, 1, img.GetSpacing()[2])
         img = sitk.GetArrayFromImage(img)
         if self.transpose == 'dhw2hwd':
             img = np.transpose(img, (1,2,0))
