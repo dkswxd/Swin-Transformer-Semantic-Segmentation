@@ -241,7 +241,7 @@ class SoftDiceLossSquared(nn.Module):
 @LOSSES.register_module()
 class DC_and_CE_loss(nn.Module):
     def __init__(self, soft_dice_kwargs, ce_kwargs, aggregate="sum", square_dice=False, weight_ce=1, weight_dice=1,
-                 log_dice=False, ignore_label=None, loss_weight=1.0):
+                 log_dice=False, ignore_label=None, loss_weight=1.0, use_sigmoid=None):
         """
         CAREFUL. Weights for CE and Dice do not need to sum to one. You can set whatever you want.
         :param soft_dice_kwargs:
@@ -269,7 +269,7 @@ class DC_and_CE_loss(nn.Module):
         else:
             self.dc = SoftDiceLossSquared(apply_nonlin=softmax_helper, **soft_dice_kwargs)
 
-    def forward(self, net_output, target):
+    def forward(self, net_output, target, weight, ignore_index):
         """
         target must be b, c, x, y(, z) with c=1
         :param net_output:
@@ -288,7 +288,7 @@ class DC_and_CE_loss(nn.Module):
         if self.log_dice:
             dc_loss = -torch.log(-dc_loss)
 
-        ce_loss = self.ce(net_output, target[:, 0].long()) if self.weight_ce != 0 else 0
+        ce_loss = self.ce(net_output, target) if self.weight_ce != 0 else 0
         if self.ignore_label is not None:
             ce_loss *= mask[:, 0]
             ce_loss = ce_loss.sum() / mask.sum()

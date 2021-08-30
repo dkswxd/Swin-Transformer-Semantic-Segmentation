@@ -30,6 +30,7 @@ class LiTS(CustomDataset):
     def __init__(self, split, replace=('volume', 'segmentation'), **kwargs):
         self.replace=replace
         self.transpose = 'dhw2hwd'
+        self.lits_remove_turmor = True
         super(LiTS, self).__init__(
             img_suffix='.nii', seg_map_suffix='.nii', split=split, **kwargs)
         assert osp.exists(self.img_dir) and self.split is not None
@@ -75,6 +76,8 @@ class LiTS(CustomDataset):
             else:
                 gt_seg_map = sitk.ReadImage(seg_map, imageIO="NiftiImageIO")
                 gt_seg_map = sitk.GetArrayFromImage(gt_seg_map)
+                if self.lits_remove_turmor:
+                    gt_seg_map[gt_seg_map > 0] = 1
                 if self.transpose == 'dhw2hwd':
                     gt_seg_map = np.transpose(gt_seg_map, (1,2,0))
             gt_seg_maps.append(gt_seg_map)
@@ -87,3 +90,88 @@ class LiTS(CustomDataset):
             result = sitk.GetImageFromArray(result.astype(np.uint8))
             sitk.WriteImage(result, os.path.join('./LiTS_val/results',img_info['filename'].replace(*self.replace)))
 
+
+    def evaluate(self,
+                 results,
+                 metric='mIoU',
+                 logger=None,
+                 efficient_test=False,
+                 **kwargs):
+        """Evaluate the dataset.
+
+        Args:
+            results (list): Testing results of the dataset.
+            metric (str | list[str]): Metrics to be evaluated. 'mIoU' and
+                'mDice' are supported.
+            logger (logging.Logger | None | str): Logger used for printing
+                related information during evaluation. Default: None.
+
+        Returns:
+            dict[str, float]: Default metrics.
+        """
+
+        if isinstance(metric, str):
+            metric = [metric]
+        allowed_metrics = ['mIoU', 'mDice']
+        if not set(metric).issubset(set(allowed_metrics)):
+            raise KeyError('metric {} is not supported'.format(metric))
+        eval_results = {}
+        gt_seg_maps = self.get_gt_seg_maps(efficient_test)
+        if self.CLASSES is None:
+            num_classes = len(
+                reduce(np.union1d, [np.unique(_) for _ in gt_seg_maps]))
+        else:
+            num_classes = len(self.CLASSES)
+        results_sliced = []
+        gt_seg_maps_sliced = []
+        for _results, _gt_seg_maps in zip(results, gt_seg_maps):
+            assert _results.shape == _gt_seg_maps.shape
+            for _slice in range(_results.shape[-1]):
+                results_sliced.append(_results[:,:,_slice])
+                gt_seg_maps_sliced.append(_gt_seg_maps[:,:,_slice])
+        results = results_sliced
+        gt_seg_maps = gt_seg_maps_sliced
+        ret_metrics = eval_metrics(
+            results,
+            gt_seg_maps,
+            num_classes,
+            self.ignore_index,
+            metric,
+            label_map=self.label_map,
+            reduce_zero_label=self.reduce_zero_label)
+        class_table_data = [['Class'] + [m[1:] for m in metric] + ['Acc']]
+        if self.CLASSES is None:
+            class_names = tuple(range(num_classes))
+        else:
+            class_names = self.CLASSES
+        ret_metrics_round = [
+            np.round(ret_metric * 100, 2) for ret_metric in ret_metrics
+        ]
+        for i in range(num_classes):
+            class_table_data.append([class_names[i]] +
+                                    [m[i] for m in ret_metrics_round[2:]] +
+                                    [ret_metrics_round[1][i]])
+        summary_table_data = [['Scope'] +
+                              ['m' + head
+                               for head in class_table_data[0][1:]] + ['aAcc']]
+        ret_metrics_mean = [
+            np.round(np.nanmean(ret_metric) * 100, 2)
+            for ret_metric in ret_metrics
+        ]
+        summary_table_data.append(['global'] + ret_metrics_mean[2:] +
+                                  [ret_metrics_mean[1]] +
+                                  [ret_metrics_mean[0]])
+        print_log('per class results:', logger)
+        table = AsciiTable(class_table_data)
+        print_log('\n' + table.table, logger=logger)
+        print_log('Summary:', logger)
+        table = AsciiTable(summary_table_data)
+        print_log('\n' + table.table, logger=logger)
+
+        for i in range(1, len(summary_table_data[0])):
+            eval_results[summary_table_data[0]
+                         [i]] = summary_table_data[1][i] / 100.0
+        if mmcv.is_list_of(results, str):
+            for file_name in results:
+                os.remove(file_name)
+        return eval_results

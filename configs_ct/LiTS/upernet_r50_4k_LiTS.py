@@ -16,13 +16,13 @@ model = dict(
         num_classes=2,
         norm_cfg=norm_cfg,
         conv_cfg=conv_cfg,
-        loss_decode=dict(type='DC_and_CE_loss', loss_weight=0.4)
+        loss_decode=dict(type='DC_and_CE_loss', soft_dice_kwargs=dict(), ce_kwargs=dict(), loss_weight=1.0)
     ),
     auxiliary_head=dict(
         num_classes=2,
         norm_cfg=norm_cfg,
         conv_cfg=conv_cfg,
-        loss_decode=dict(type='DC_and_CE_loss', loss_weight=0.4)
+        loss_decode=dict(type='DC_and_CE_loss', soft_dice_kwargs=dict(), ce_kwargs=dict(), loss_weight=0.4)
     ),
     test_cfg=dict(
         mode='slide',
