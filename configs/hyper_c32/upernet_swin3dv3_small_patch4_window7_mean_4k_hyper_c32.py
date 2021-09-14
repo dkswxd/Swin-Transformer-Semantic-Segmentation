@@ -8,15 +8,17 @@ model = dict(
         embed_dim=96,
         depths=[2, 2, 18, 2],
         num_heads=[3, 6, 12, 24],
-        window_size=((1, 7, 7), (1, 7, 7)),
-        shift=((0, 0, 0), (0, 3, 3)),
-        dilate=((1, 1, 1), (1, 1, 1)),
-        patch_size=(32, 4, 4),
+        window_size=((1, 7, 7), (1, 7, 7), (8, 1, 1)),
+        shift=((0, 0, 0), (0, 3, 3), (0, 0, 0)),
+        dilate=((1, 1, 1), (1, 1, 1), (1, 1, 1)),
+        patch_size=(4, 4, 4),
+        down_sample_size=(1, 2, 2),
         ape=False,
         drop_path_rate=0.3,
         patch_norm=True,
         use_checkpoint=True,
-        in_chans=1
+        in_chans=1,
+        use_spectral_aggregation='mean'
     ),
     decode_head=dict(
         in_channels=[96, 192, 384, 768],
@@ -46,4 +48,4 @@ lr_config = dict(_delete_=True, policy='poly',
 
 data = dict(
     samples_per_gpu=2,
-    workers_per_gpu=2,)
+    workers_per_gpu=8,)

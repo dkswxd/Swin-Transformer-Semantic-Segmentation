@@ -1,46 +1,34 @@
 _base_ = [
-    '../_base_/models/upernet_swin3dv3.py', '../_base_/datasets/LiTS.py',
+    '../_base_/models/upernet_swin3dv3.py', '../_base_/datasets/hyper_c32.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_4k.py'
 ]
-norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
-conv_cfg = dict(type='Conv3d')
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     backbone=dict(
         embed_dim=96,
         depths=[2, 2, 18, 2],
         num_heads=[3, 6, 12, 24],
-        window_size=((4, 4, 4), (4, 4, 4)),
-        shift=((0, 0, 0), (2, 2, 2)),
-        dilate=((1, 1, 1), (1, 1, 1)),
+        window_size=((1, 7, 7), (1, 7, 7), (8, 1, 1)),
+        shift=((0, 0, 0), (0, 3, 3), (0, 0, 0)),
+        dilate=((1, 1, 1), (1, 1, 1), (1, 1, 1)),
         patch_size=(4, 4, 4),
-        down_sample_size=(2, 2, 2),
+        down_sample_size=(1, 2, 2),
         ape=False,
         drop_path_rate=0.3,
         patch_norm=True,
         use_checkpoint=True,
-        use_spectral_aggregation=False,
-        in_chans=1
+        in_chans=1,
+        use_spectral_aggregation='max'
     ),
     decode_head=dict(
         in_channels=[96, 192, 384, 768],
-        channels=256,
-        num_classes=3,
-        norm_cfg=norm_cfg,
-        conv_cfg=conv_cfg,
-        loss_decode=dict(type='DC_and_CE_loss', loss_weight=1)
+        num_classes=2,
+        norm_cfg=norm_cfg
     ),
     auxiliary_head=dict(
         in_channels=384,
-        channels=128,
-        num_classes=3,
-        norm_cfg=norm_cfg,
-        conv_cfg=conv_cfg,
-        loss_decode=dict(type='DC_and_CE_loss', loss_weight=0.4)
-    ),
-    test_cfg=dict(
-        mode='slide',
-        stride=(160,160,40),
-        crop_size=(320, 320, 80)
+        num_classes=2,
+        norm_cfg=norm_cfg
     ))
 
 # AdamW optimizer, no weight decay for position embedding & layer norm in backbone
@@ -59,5 +47,5 @@ lr_config = dict(_delete_=True, policy='poly',
 
 
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=1,)
+    samples_per_gpu=2,
+    workers_per_gpu=8,)

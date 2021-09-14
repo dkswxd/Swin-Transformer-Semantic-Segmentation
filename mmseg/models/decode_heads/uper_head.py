@@ -72,7 +72,7 @@ class UPerHead(BaseDecodeHead):
             conv_cfg=self.conv_cfg,
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
-        if self.conv_cfg['type'] == 'Conv3d':
+        if (self.conv_cfg is not None and self.conv_cfg['type'] == 'Conv3d'):
             self.resize_mode = 'trilinear'
         else:
             self.resize_mode = 'bilinear'
