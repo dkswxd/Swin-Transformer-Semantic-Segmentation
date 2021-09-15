@@ -824,7 +824,7 @@ class PatchEmbed(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer. Default: None
     """
 
-    def __init__(self, patch_size=(4, 4, 4), in_chans=1, embed_dim=96, norm_layer=None):
+    def __init__(self, patch_size=(4, 4, 4), in_chans=1, embed_dim=96, norm_layer=None,use_spectral_aggregation='None'):
         super().__init__()
         # patch_size = to_2tuple(patch_size)
         # if not isinstance(patch_size, tuple):
@@ -840,8 +840,18 @@ class PatchEmbed(nn.Module):
         else:
             self.norm = None
 
+        self.use_spectral_aggregation = use_spectral_aggregation
+        if self.use_spectral_aggregation == 'token':
+            self.spectral_aggregation_token = nn.Parameter(data=torch.empty(embed_dim),requires_grad=True)
+            trunc_normal_(self.spectral_aggregation_token, std=.02)
+
     def forward(self, x):
         """Forward function."""
+        # input x: BxSxHxW
+        if self.use_spectral_aggregation != 'None':
+            x = F.instance_norm(x)
+            x = torch.unsqueeze(x, 1)
+            # unsqueeze x: Bx1xSxHxW
         # padding
         _, _, S, H, W = x.size()
         if W % self._patch_size[2] != 0:
@@ -852,11 +862,16 @@ class PatchEmbed(nn.Module):
             x = F.pad(x, [0, 0, 0, 0, 0, self._patch_size[0] - S % self._patch_size[0]])
 
         x = self.proj(x)  # B C Ws Wh Ww
+        if self.use_spectral_aggregation == 'token':
+            _b, _c, _s, _h, _w = x.shape
+            token = self.spectral_aggregation_token.view(1, -1, 1, 1, 1).repeat(_b, 1, 1, _h, _w)
+            x = torch.cat((token, x), dim=2)
         if self.norm is not None:
             Ws, Wh, Ww = x.size(2), x.size(3), x.size(4)
             x = x.flatten(2).transpose(1, 2)
             x = self.norm(x)
             x = x.transpose(1, 2).view(-1, self.embed_dim, Ws, Wh, Ww)
+
 
         return x
 
@@ -916,7 +931,7 @@ class SwinTransformer3Dv3(nn.Module):
                  frozen_stages=-1,
                  use_checkpoint=False,
                  image_size=(32, 518, 518),
-                 use_spectral_aggregation=True
+                 use_spectral_aggregation='None'
                  ):
         super().__init__()
 
@@ -933,7 +948,7 @@ class SwinTransformer3Dv3(nn.Module):
         # split image into non-overlapping patches
         self.patch_embed = PatchEmbed(
             patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
-            norm_layer=norm_layer if self.patch_norm else None)
+            norm_layer=norm_layer if self.patch_norm else None, use_spectral_aggregation=use_spectral_aggregation)
         image_size = [image_size_ // patch_size_ for image_size_, patch_size_ in zip(image_size, patch_size)]
 
         # absolute position embedding
@@ -1017,30 +1032,17 @@ class SwinTransformer3Dv3(nn.Module):
         """
 
         def _init_weights(m):
-            # norm_function = nn.init.kaiming_normal_
-            norm_function = nn.init.kaiming_uniform_
-            # norm_function = nn.init.uniform_
-            # norm_function = nn.init.trunc_normal_
-            # norm_function = nn.init.normal_
-            # norm_function = nn.init.xavier_uniform_
-            # norm_function = nn.init.xavier_normal_
-            # norm_function = nn.init.orthogonal_
-
-
             if isinstance(m, nn.Linear):
-                # trunc_normal_(m.weight, std=.02)
-                norm_function(m.weight)
+                trunc_normal_(m.weight, std=.02)
                 if isinstance(m, nn.Linear) and m.bias is not None:
                     nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Conv3d):
-                # trunc_normal_(m.weight, std=.02)
-                norm_function(m.weight)
-            elif isinstance(m, nn.Conv2d):
-                # trunc_normal_(m.weight, std=.02)
-                norm_function(m.weight)
             elif isinstance(m, nn.LayerNorm):
                 nn.init.constant_(m.bias, 0)
                 nn.init.constant_(m.weight, 1.0)
+            elif isinstance(m, nn.Conv3d):
+                trunc_normal_(m.weight, std=.02)
+            elif isinstance(m, nn.Conv2d):
+                trunc_normal_(m.weight, std=.02)
 
         if isinstance(pretrained, str):
             self.apply(_init_weights)
@@ -1053,10 +1055,6 @@ class SwinTransformer3Dv3(nn.Module):
 
     def forward(self, x):
         """Forward function."""
-        # input x: BxSxHxW
-        if self.use_spectral_aggregation:
-            x = torch.unsqueeze(x, 1)
-        # unsqueeze x: Bx1xSxHxW
         x = self.patch_embed(x)
 
         Ws, Wh, Ww = x.size(2), x.size(3), x.size(4)
@@ -1077,9 +1075,21 @@ class SwinTransformer3Dv3(nn.Module):
                 norm_layer = getattr(self, f'norm{i}')
                 x_out = norm_layer(x_out)
 
-                if self.use_spectral_aggregation:
+                if self.use_spectral_aggregation == 'keep_all':
                     out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3).contiguous()
                     out = out.view(-1, self.num_features[i] * S, H, W).contiguous()
+                    outs.append(out)
+                elif self.use_spectral_aggregation == 'max':
+                    out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3)
+                    out = out.max(axis=2)[0].contiguous()
+                    outs.append(out)
+                elif self.use_spectral_aggregation == 'mean':
+                    out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3)
+                    out = out.mean(axis=2).contiguous()
+                    outs.append(out)
+                elif self.use_spectral_aggregation == 'token':
+                    out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3)
+                    out = out[:, :, 0, :, :].contiguous()
                     outs.append(out)
                 else:
                     out = x_out.view(-1, S, H, W, self.num_features[i]).permute(0, 4, 1, 2, 3).contiguous()

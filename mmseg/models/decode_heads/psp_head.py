@@ -31,7 +31,7 @@ class PPM(nn.ModuleList):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.act_cfg = act_cfg
-        if (self.conv_cfg is not None and self.conv_cfg['type'] == 'Conv3d'):
+        if (conv_cfg is not None and conv_cfg['type'] == 'Conv3d'):
             adaptive_pooling_layer = nn.AdaptiveAvgPool3d
             self.resize_mode = 'trilinear'
         else:

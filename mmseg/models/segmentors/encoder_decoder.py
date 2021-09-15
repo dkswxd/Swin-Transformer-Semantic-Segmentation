@@ -217,8 +217,8 @@ class EncoderDecoder(BaseSegmentor):
             h_grids = max(h_img - h_crop + h_stride - 1, 0) // h_stride + 1
             w_grids = max(w_img - w_crop + w_stride - 1, 0) // w_stride + 1
             z_grids = max(z_img - z_crop + z_stride - 1, 0) // z_stride + 1
-            preds = img.new_zeros((batch_size, num_classes, h_img, w_img, z_img))
-            count_mat = img.new_zeros((batch_size, 1, h_img, w_img, z_img))
+            preds = img.new_zeros((batch_size, num_classes, h_img, w_img, z_img)).cpu()
+            count_mat = img.new_zeros((batch_size, 1, h_img, w_img, z_img)).cpu()
             for h_idx in range(h_grids):
                 for w_idx in range(w_grids):
                     for z_idx in range(z_grids):
@@ -236,14 +236,14 @@ class EncoderDecoder(BaseSegmentor):
                         preds += F.pad(crop_seg_logit,
                                        (int(z1), int(preds.shape[4] - z2),
                                         int(x1), int(preds.shape[3] - x2),
-                                        int(y1), int(preds.shape[2] - y2)))
+                                        int(y1), int(preds.shape[2] - y2))).cpu()
 
                         count_mat[:, :, y1:y2, x1:x2, z1:z2] += 1
             assert (count_mat == 0).sum() == 0
             if torch.onnx.is_in_onnx_export():
                 # cast count_mat to constant while exporting to ONNX
                 count_mat = torch.from_numpy(
-                    count_mat.cpu().detach().numpy()).to(device=img.device)
+                    count_mat.cpu().detach().numpy()).to(device=preds.device)
             preds = preds / count_mat
             if rescale:
                 preds = resize(
@@ -311,7 +311,7 @@ class EncoderDecoder(BaseSegmentor):
     def simple_test(self, img, img_meta, rescale=True):
         """Simple test with single image."""
         seg_logit = self.inference(img, img_meta, rescale).to(torch.float16)
-        seg_pred = seg_logit.argmax(dim=1)
+        seg_pred = seg_logit.cpu().argmax(dim=1)
         if torch.onnx.is_in_onnx_export():
             # our inference backend only support 4D output
             seg_pred = seg_pred.unsqueeze(0)

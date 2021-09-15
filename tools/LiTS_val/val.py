@@ -39,6 +39,7 @@ liver_score['msd'] = []
 # 定义网络并加载参数
 
 for file_index, file in enumerate(os.listdir('./results/')):
+
     file_name.append(file)
     ct = sitk.ReadImage(os.path.join('../../data/LiTS/Training/', file.replace('segmentation','volume')), sitk.sitkUInt8)
     # 将pred读入内存
