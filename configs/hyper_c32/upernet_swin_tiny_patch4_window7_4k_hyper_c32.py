@@ -6,7 +6,7 @@ norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     backbone=dict(
         embed_dim=96,
-        depths=[2, 2, 18, 2],
+        depths=[2, 2, 2, 2],
         num_heads=[3, 6, 12, 24],
         window_size=7,
         ape=False,

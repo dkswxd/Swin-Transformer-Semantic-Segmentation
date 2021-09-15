@@ -12,4 +12,4 @@ model = dict(
 
 data = dict(
     samples_per_gpu=2,
-    workers_per_gpu=2,)
+    workers_per_gpu=8,)
